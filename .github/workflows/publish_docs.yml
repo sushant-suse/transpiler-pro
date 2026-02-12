@@ -1,35 +1,27 @@
-name: Security & Docs
+name: Deploy Live Docs
 
 on:
   push:
-    branches: [main]  # Updated to 'main' since you are working there
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
-  audit-and-docs:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-
-      - name: Set up Environment
+      
+      - name: Build & Deploy
         run: |
           uv venv
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
-
-      - name: Security Audit
-        run: |
-          uv pip install pip-audit
-          pip-audit
-
-      - name: Generate Docs
-        run: |
           uv sync --group dev
           uv run pdoc ./src/transpiler_pro -o ./public
-
-      - name: Deploy to GitHub Pages
+          
+      - name: Upload to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: public

@@ -1,39 +1,42 @@
 name: Quality Gate
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  test:
+  test-and-audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv python install 3.13
       
-      - name: Install & Test with Coverage
+      - name: Install Project
         run: |
           uv venv
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
-          uv pip install -e ".[dev]"
-          uv run pytest --cov=src --cov-report=term-missing > coverage_report.txt
-          
-      - name: Prepare Coverage Artifacts
-        if: github.event_name == 'pull_request'
-        run: |
-          echo "${{ github.event.number }}" > pr_number.txt
-          echo "<details><summary>🚩 Code Coverage Report</summary>" > coverage_comment.txt
-          echo "" >> coverage_comment.txt
-          echo '```text' >> coverage_comment.txt
-          cat coverage_report.txt >> coverage_comment.txt
-          echo '```' >> coverage_comment.txt
-          echo "" >> coverage_comment.txt
-          echo "</details>" >> coverage_comment.txt
+          uv sync --group dev
 
-      - name: Upload Artifacts
+      - name: Lint & Test
+        run: |
+          uv run ruff check .
+          uv run pytest --cov=src --cov-report=term-missing > coverage_report.txt
+
+      - name: Security Audit
+        run: |
+          uv pip install pip-audit
+          pip-audit
+
+      - name: Generate Doc Preview
+        run: uv run pdoc ./src/transpiler_pro -o ./public_preview
+
+      - name: Upload Artifacts (Coverage & Docs)
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-artifact
+          name: pr-artifacts
           path: |
-            pr_number.txt
-            coverage_comment.txt
+            coverage_report.txt
+            public_preview/
