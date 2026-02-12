@@ -1,0 +1,31 @@
+name: Security & Docs
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  audit-and-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Security Audit
+        run: uv pip audit
+
+      - name: Generate Docs
+        run: |
+          uv venv
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          uv pip install -e ".[dev]"
+          uv run pdoc ./src/transpiler_pro -o ./public
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: public
+          branch: gh-pages
