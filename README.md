@@ -10,6 +10,8 @@ This project solves the "hallucination" and formatting breakage issues common in
 2. **Transpilation**: Utilizes `kramdoc` for standard element conversion (tables, headers, bold/italic).
 3. **Post-processing**: Deterministically reconstructs protected components into perfect AsciiDoc syntax.
 
+Refer to the [System Architecture document](System-Architecture.md) for an in-depth breakdown of the code structure, module interactions, and data flow.
+
 ## 📂 Folder Structure
 
 ```text
