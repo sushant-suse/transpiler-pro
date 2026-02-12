@@ -15,13 +15,16 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Security Audit
-        run: uv pip audit
+        run: |
+          uv pip install --system pip-audit
+          pip-audit
 
       - name: Generate Docs
         run: |
           uv venv
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
-          uv pip install -e ".[dev]"
+          # uv sync is the most reliable way to install your dev group
+          uv sync --group dev
           uv run pdoc ./src/transpiler_pro -o ./public
 
       - name: Deploy to GitHub Pages
