@@ -1,0 +1,28 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Environments
+.venv/
+venv/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation
+docs/
+public/
+
+# Project Specific
+.vale.ini
+*.tmp.md
+
+# Data Boundaries
+data/outputs/*
+!data/outputs/.gitkeep
+
+# Mac OS specific
+.DS_Store

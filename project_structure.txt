@@ -1,0 +1,186 @@
+.
+├── README.md
+├── data
+│   ├── inputs
+│   │   ├── test.md
+│   │   ├── test2.md
+│   │   └── test3.md
+│   └── outputs
+│       ├── test.adoc
+│       ├── test2.adoc
+│       └── test3.adoc
+├── project_structure.txt
+├── pyproject.toml
+├── src
+│   └── transpiler_pro
+│       ├── __init__.py
+│       ├── __pycache__
+│       │   ├── __init__.cpython-313.pyc
+│       │   └── cli.cpython-313.pyc
+│       ├── cli.py
+│       ├── core
+│       │   ├── __pycache__
+│       │   │   ├── converter.cpython-313.pyc
+│       │   │   └── linter.cpython-313.pyc
+│       │   ├── converter.py
+│       │   ├── linter.py
+│       │   └── refiner.py
+│       └── utils
+│           ├── __pycache__
+│           │   └── paths.cpython-313.pyc
+│           └── paths.py
+├── styles
+│   └── suse-styles
+│       ├── EXAMPLE.vale.ini
+│       ├── LICENSE
+│       ├── README.md
+│       ├── asciidoc
+│       │   ├── EmptyAltText.yml
+│       │   ├── ExampleLinks.yml.orig
+│       │   ├── LongScreen.yml
+│       │   ├── LowercasedTableHeaders.yml
+│       │   ├── NoWidthForFigures.yml
+│       │   ├── README
+│       │   └── UppercasedFigureFilename.yml
+│       ├── common
+│       │   ├── AcronymApostrophe.yml
+│       │   ├── AmericanSpelling.yml
+│       │   ├── Colons.yml
+│       │   ├── Contractions.yml.bak
+│       │   ├── CorporateSpeak.yml
+│       │   ├── DoubleDash.yml
+│       │   ├── Editorializing.yml
+│       │   ├── EmDash.yml
+│       │   ├── Exclamation.yml
+│       │   ├── Hardware.yml
+│       │   ├── InclusiveLanguage.yml
+│       │   ├── Latin.yml
+│       │   ├── Link.yml
+│       │   ├── LyHyphen.yml
+│       │   ├── Ordinal.yml
+│       │   ├── Periods.yml
+│       │   ├── Pronouns.yml
+│       │   ├── Quotes.yml
+│       │   ├── QuotesRaw.yml
+│       │   ├── README.TermWeb.md
+│       │   ├── Repetition.yml
+│       │   ├── Semicolons.yml
+│       │   ├── SentenceLength.yml.bak
+│       │   ├── SimpleSeries.yml
+│       │   ├── Slash.yml.orig
+│       │   ├── Spacing.yml
+│       │   ├── SurroundingCommas.yml
+│       │   ├── Terms.yml
+│       │   ├── TermsIgnorecase.yml
+│       │   ├── TermwebProducts3rdParty.yml
+│       │   ├── TermwebProductsSUSE.yml
+│       │   ├── TermwebTerms.yml
+│       │   ├── Test.yml
+│       │   ├── Usage.yml
+│       │   ├── Will.yml
+│       │   ├── Wordiness.yml
+│       │   ├── meta.json
+│       │   └── xslt
+│       │       └── termweb2text.xsl
+│       ├── config
+│       │   ├── dictionaries
+│       │   │   ├── en_US-suse-doc.aff -> en_US.aff
+│       │   │   ├── en_US-suse-doc.dic
+│       │   │   ├── en_US.aff
+│       │   │   └── en_US.dic
+│       │   └── scripts
+│       │       └── LongScreenDB.tengo
+│       ├── docbook
+│       │   ├── DiscouragedMarkup.yml
+│       │   ├── EmptyAltText.yml
+│       │   ├── EmptyTableHeaders.yml
+│       │   ├── ExampleLinks.yml.orig
+│       │   ├── LongScreen.yml
+│       │   ├── LowercasedTableHeaders.yml
+│       │   ├── NoIdForFigures.yml
+│       │   ├── NoQuotes.yml
+│       │   ├── NoWidthForFigures.yml
+│       │   ├── Units.yml
+│       │   └── UppercasedFigureFilename.yml
+│       ├── tests
+│       │   ├── Colons-bad.txt
+│       │   ├── Colons-good.txt
+│       │   ├── Colons-good.xml
+│       │   ├── Contractions-bad.txt
+│       │   ├── Contractions-good.txt
+│       │   ├── DiscouragedMarkup-bad.xml
+│       │   ├── EmptyAltText-bad.adoc
+│       │   ├── EmptyAltText-bad.xml
+│       │   ├── EmptyAltText-good.adoc
+│       │   ├── EmptyAltText-good.xml
+│       │   ├── EmptyTableHeaders-bad.xml
+│       │   ├── EmptyTableHeaders-good.xml
+│       │   ├── ExampleLinks-bad .adoc
+│       │   ├── ExampleLinks-bad.xml
+│       │   ├── ExampleLinks-good.adoc
+│       │   ├── ExampleLinks-good.xml
+│       │   ├── InclusiveLanguage-bad.txt
+│       │   ├── InclusiveLanguage-good.txt
+│       │   ├── Latin-bad.txt
+│       │   ├── Latin-good.txt
+│       │   ├── LongScreen-bad-additional.adoc
+│       │   ├── LongScreen-bad.adoc
+│       │   ├── LongScreen-bad.xml
+│       │   ├── LongScreen-good.adoc
+│       │   ├── LongScreen-good.xml
+│       │   ├── LowercasedTableHeaders-bad.adoc
+│       │   ├── LowercasedTableHeaders-bad.xml
+│       │   ├── LowercasedTableHeaders-good.adoc
+│       │   ├── LowercasedTableHeaders-good.xml
+│       │   ├── Misc.xml
+│       │   ├── NoIdForFigures-bad.xml
+│       │   ├── NoIdForFigures-good.xml
+│       │   ├── NoWidthForFigures-bad.adoc
+│       │   ├── NoWidthForFigures-bad.xml
+│       │   ├── NoWidthForFigures-good.adoc
+│       │   ├── NoWidthForFigures-good.xml
+│       │   ├── SentenceLength-bad.txt
+│       │   ├── SentenceLength-good.txt
+│       │   ├── SentenceLength-good.xml
+│       │   ├── Slash-bad.txt
+│       │   ├── Slash-good.txt
+│       │   ├── Spelling-bad.txt
+│       │   ├── SurroundingCommas-bad.txt
+│       │   ├── SurroundingCommas-bad.xml
+│       │   ├── SurroundingCommas-good.txt
+│       │   ├── SurroundingCommas-good.xml
+│       │   ├── Terms-bad.txt
+│       │   ├── Terms-good.txt
+│       │   ├── UppercasedFigureFilename-bad.adoc
+│       │   ├── UppercasedFigureFilename-bad.xml
+│       │   ├── UppercasedFigureFilename-good.adoc
+│       │   ├── UppercasedFigureFilename-good.xml
+│       │   ├── Usage-bad.txt
+│       │   ├── Usage-good.txt
+│       │   ├── generic-entities.ent
+│       │   ├── test-correct.adoc
+│       │   ├── test-correct.txt
+│       │   ├── test-correct.xml
+│       │   ├── test-wrong.adoc
+│       │   ├── test-wrong.txt
+│       │   └── test-wrong.xml
+│       └── xslt
+│           └── vale-docbook.xsl
+├── tests
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── test_converter.cpython-313-pytest-9.0.2.pyc
+│   │   └── test_linter.cpython-313-pytest-9.0.2.pyc
+│   ├── core
+│   │   ├── __pycache__
+│   │   │   ├── test_converter.cpython-313-pytest-9.0.2.pyc
+│   │   │   └── test_linter.cpython-313-pytest-9.0.2.pyc
+│   │   ├── test_converter.py
+│   │   └── test_linter.py
+│   └── utils
+│       ├── __pycache__
+│       │   └── test_paths.cpython-313-pytest-9.0.2.pyc
+│       └── test_paths.py
+└── uv.lock
+
+28 directories, 156 files
