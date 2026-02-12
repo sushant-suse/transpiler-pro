@@ -17,7 +17,11 @@ jobs:
         run: uv python install 3.13
 
       - name: Install Project
-        run: uv pip install -e .
+        # Create a venv and add it to GITHUB_PATH so all following steps use it
+        run: |
+          uv venv
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          uv pip install -e .
 
       - name: Lint with Ruff
         run: uv run ruff check .
