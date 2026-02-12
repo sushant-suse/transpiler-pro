@@ -2,7 +2,7 @@ name: Security & Docs
 
 on:
   push:
-    branches: [master]
+    branches: [main]  # Updated to 'main' since you are working there
 
 permissions:
   contents: write
@@ -14,16 +14,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
 
+      - name: Set up Environment
+        run: |
+          uv venv
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
       - name: Security Audit
         run: |
-          uv pip install --system pip-audit
+          uv pip install pip-audit
           pip-audit
 
       - name: Generate Docs
         run: |
-          uv venv
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
-          # uv sync is the most reliable way to install your dev group
           uv sync --group dev
           uv run pdoc ./src/transpiler_pro -o ./public
 

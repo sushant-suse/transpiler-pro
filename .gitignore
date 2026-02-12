@@ -26,3 +26,6 @@ data/outputs/*
 
 # Mac OS specific
 .DS_Store
+
+# Personal Tracking files
+project_structure.txt
