@@ -17,7 +17,7 @@ jobs:
         run: uv python install 3.13
 
       - name: Install Project
-        run: uv pip install -e .
+        run: uv pip install --system -e .
 
       - name: Lint with Ruff
         run: uv run ruff check .
