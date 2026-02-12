@@ -22,9 +22,11 @@ jobs:
         run: |
           echo "${{ github.event.number }}" > pr_number.txt
           echo "<details><summary>🚩 Code Coverage Report</summary>" > coverage_comment.txt
-          echo "\`\`\`" >> coverage_comment.txt
+          echo "" >> coverage_comment.txt
+          echo '```text' >> coverage_comment.txt
           cat coverage_report.txt >> coverage_comment.txt
-          echo "\`\`\`" >> coverage_comment.txt
+          echo '```' >> coverage_comment.txt
+          echo "" >> coverage_comment.txt
           echo "</details>" >> coverage_comment.txt
 
       - name: Upload Artifacts
