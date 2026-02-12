@@ -1,24 +1,36 @@
-name: Release
+name: Release on Merge
 
 on:
-  push:
-    tags:
-      - 'v*'
+  pull_request:
+    types: [closed]
+    branches: [main, master]
 
 jobs:
-  release:
+  check-and-release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
 
-      - name: Build Package
-        run: uv build
+      - name: Extract Version
+        id: vars
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          VERSION=${BRANCH#release/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+      - name: Build and Release
+        run: |
+          uv build
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag ${{ steps.vars.outputs.version }}
+          git push origin ${{ steps.vars.outputs.version }}
 
-      - name: Create Release
+      - name: GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.vars.outputs.version }}
           files: dist/*
           generate_release_notes: true

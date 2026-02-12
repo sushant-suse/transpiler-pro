@@ -2,7 +2,7 @@ name: Deploy Live Docs
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
 
 permissions:
   contents: write
@@ -14,14 +14,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       
-      - name: Build & Deploy
+      - name: Build Docs
         run: |
           uv venv
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
           uv sync --group dev
           uv run pdoc ./src/transpiler_pro -o ./public
           
-      - name: Upload to GitHub Pages
+      - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: public
