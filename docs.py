@@ -72,7 +72,8 @@ def build_portal():
 
     # 4. Portal Generation
     create_home_page(project_root, docs_out)
-    create_adoc_viewer(docs_out) 
+    create_adoc_viewer(docs_out)
+    (docs_out / ".nojekyll").touch()
 
     console.print("\n[bold green]✨ Portal Ready! Open docs/index.html to view everything.[/]")
 
