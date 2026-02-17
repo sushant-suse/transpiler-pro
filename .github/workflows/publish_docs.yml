@@ -13,19 +13,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'recursive' # Ensure SUSE styles are pulled
+          submodules: 'recursive' # Pulls SUSE styles for the Linter/Fixer
 
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true # Speeds up subsequent builds
 
       - name: Build Unified Portal
         run: |
+          # 1. Install dependencies (including dev tools like pytest, pdoc, coverage)
           uv sync --group dev
+          
+          # 2. Ensure the NLP model is present for the StyleFixer logic
           uv run python -m spacy download en_core_web_sm
-          # Run your custom engine to generate EVERYTHING into ./docs
+          
+          # 3. Execute the custom build engine
+          # This generates the portal, test docs, coverage, and .nojekyll
           uv run python docs.py 
           
-      - name: Deploy
+      - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: docs
-          branch: gh-pages
+          folder: docs       # Deploy contents of local /docs folder
+          branch: gh-pages   # To the gh-pages branch
+          clean: true        # Automatically remove old files not in the current build
