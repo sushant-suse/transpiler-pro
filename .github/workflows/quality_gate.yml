@@ -29,13 +29,14 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # Install Vale CLI (Required for Phase 2 Linter logic)
-          sudo apt-get update && sudo apt-get install -y vale
+          # Install the latest stable Vale CLI via Homebrew
+          brew install vale
+          vale --version
           
-          # 'uv sync' automatically creates the .venv and installs everything
+          # 'uv sync' creates the environment and installs locked dependencies
           uv sync --group dev
           
-          # Download the specific spaCy model for Phase 2.5 Fixer logic
+          # Install the spaCy model compatible with the current environment
           uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
       - name: Security Audit
