@@ -2,8 +2,16 @@
 name = "transpiler-pro"
 version = "1.0.0"
 description = "Enterprise MD-to-ADOC conversion pipeline with SUSE learning engine"
+readme = "README.md"
 requires-python = "==3.12.*"
+license = {text = "MIT"}
 authors = [{name = "Sushant Gaurav", email = "sushant-gaurav@suse.com"}]
+keywords = ["documentation", "asciidoc", "markdown", "nlp", "vale", "suse"]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Documentation",
+    "Topic :: Text Processing :: Markup",
+]
 dependencies = [
     "typer>=0.12.0",
     "rich>=13.0.0",
@@ -11,10 +19,14 @@ dependencies = [
     "pytest>=8.0.0"
 ]
 
+# Metadata for pdoc and package registries
+[project.urls]
+Homepage = "https://github.com/your-username/transpiler-pro"
+Documentation = "https://your-username.github.io/transpiler-pro/"
+
 [project.scripts]
 transpiler-pro = "transpiler_pro.cli:main"
 
-# --- CI & BUILD FIXES ---
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
@@ -24,15 +36,24 @@ dev = [
     "pytest-cov>=5.0.0",
     "pip-audit>=2.7.0",
     "ruff>=0.3.0",
+    "pdoc>=14.0.0", # Added for your documentation generation
 ]
 
 [tool.uv]
 package = true
-# ------------------------
+
+# Standardize Pytest execution
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=src --cov-report=term-missing"
+
+# Standardize Ruff (Linter) behavior
+[tool.ruff]
+line-length = 100
+target-version = "py312"
 
 [tool.transpiler-pro.pipeline]
 supported_extensions = [".md", ".mdx"]
-# The "Brain" of the operation: external JSON for massive branding/fallbacks
 knowledge_base = "data/knowledge_base.json"
 
 [tool.transpiler-pro.grammar]
@@ -54,13 +75,13 @@ removal_trigger = "removing"
 extension_map = { md = "adoc", mdx = "adoc" }
 path_normalization = [{ regex = "^\\./", replacement = "" }]
 
-# PHASE 1: SHIELDING (Markdown -> Marker)
+# PHASE 1: SHIELDING
 shielding_patterns = [
     { regex = ":::(?P<type>\\w+)\\n(?P<body>.*?)\\n:::", replacement = "MARKER_ADMON_START_\\1\n\\2\nMARKER_ADMON_END" },
     { regex = "<details>\\s*<summary>(.*?)</summary>\\s*(.*?)\\s*</details>", replacement = "MARKER_COLL_START_\\1\n\\2\nMARKER_COLL_END", hook = "protect_spaces" }
 ]
 
-# PHASE 2: RESTORATION (Marker -> AsciiDoc)
+# PHASE 2: RESTORATION
 restoration_patterns = [
     { regex = "(?s)MARKER_ADMON_START_{key}\\s+(.*?)\\s+MARKER_ADMON_END", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
     { regex = "(?s)MARKER_COLL_START_(.*?)\\n(.*?)\\nMARKER_COLL_END", replacement = ".\\1\n[%collapsible]\n======\n\\2\n======", hook = "restore_spaces" }

@@ -1,6 +1,14 @@
-"""Location: src/transpiler_pro/core/fixer.py
-Description: Learning-capable StyleFixer. Uses an external JSON Knowledge Base
-and a Global Enforcement Pass to ensure enterprise standards are always met.
+"""
+Location: src/transpiler_pro/core/fixer.py
+
+Description: Linguistic Repair Engine for Transpiler-Pro.
+
+This module provides the `StyleFixer` class, the 'Auto-Heal' brain of the pipeline.
+It utilizes:
+
+1. **NLP (spaCy)**: For context-aware tense shifting (e.g., 'will' to progressive).
+2. **Knowledge Base**: An external JSON store for branding and learned terminology.
+3. **Global Enforcement**: A safety-pass to ensure consistency across all documentation.
 """
 
 import re
@@ -10,11 +18,23 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from collections import defaultdict
 import spacy
+from rich.console import Console
+
+console = Console()
 
 class StyleFixer:
-    """Dynamic repair logic driven by Linter suggestions and a JSON Knowledge Base."""
+    """
+    NLP-driven repair engine driven by Linter suggestions and a JSON Knowledge Base.
+    
+    Attributes:
+        config (Dict): Configuration loaded from pyproject.toml.
+        kb_path (Path): Path to the JSON knowledge base.
+        kb (Dict): The brain of the operation containing branding and learned terms.
+        nlp: The spaCy language model for linguistic analysis.
+    """
 
     def __init__(self, config_path: Optional[Path] = None) -> None:
+        """Initializes the fixer, loading both the configuration and the NLP model."""
         self.config_path = config_path or Path("pyproject.toml")
         self.config = self._load_config()
         
@@ -25,40 +45,51 @@ class StyleFixer:
 
         try:
             self.nlp = spacy.load("en_core_web_sm")
-        except Exception: # Catches standard errors, allows SystemExit/KeyboardInterrupt
+        except Exception:
             self.nlp = None
 
-    def _load_config(self) -> dict:
+    def _load_config(self) -> Dict[str, Any]:
+        """Loads configuration from the project's TOML file."""
         if not self.config_path.exists(): 
             return {}
         try:
             with open(self.config_path, "rb") as f:
                 return tomllib.load(f).get("tool", {}).get("transpiler-pro", {})
-        except (tomllib.TOMLDecodeError, OSError): # Specific to file/parsing issues
+        except (tomllib.TOMLDecodeError, OSError):
             return {}
 
-    def _load_kb(self) -> dict:
-        """Loads the external JSON brain."""
+    def _load_kb(self) -> Dict[str, Any]:
+        """Loads the external JSON brain for persistent learning."""
         if self.kb_path.exists():
             try:
-                return json.loads(self.kb_path.read_text())
-            except (json.JSONDecodeError, OSError): # Specific to JSON/disk issues
+                return json.loads(self.kb_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
                 pass
         return {"branding": {}, "learned": {}}
 
     def _save_kb(self) -> None:
-        """Persists learned words back to the JSON file."""
-        self.kb_path.parent.mkdir(parents=True, exist_ok=True)
-        self.kb_path.write_text(json.dumps(self.kb, indent=4), encoding="utf-8")
+        """Persists discovered and learned words back to the JSON file."""
+        try:
+            self.kb_path.parent.mkdir(parents=True, exist_ok=True)
+            self.kb_path.write_text(json.dumps(self.kb, indent=4), encoding="utf-8")
+        except Exception as e:
+            console.print(f"[red]Error saving Knowledge Base:[/] {e}")
 
     def _get_progressive_verb(self, verb_token) -> str:
-        """Prioritizes TOML special_verbs to ensure accuracy over algorithm."""
+        """
+        Converts a verb to its progressive (-ing) form.
+        
+        Prioritizes the `[tool.transpiler-pro.grammar.special_verbs]` table from 
+        pyproject.toml to ensure precision over algorithmic guessing.
+        """
         lemma = verb_token.lemma_.lower()
         grammar_cfg = self.config.get("grammar", {})
         special = grammar_cfg.get("special_verbs", {})
+        
         if lemma in special:
             return special[lemma]
 
+        # Algorithmic fallbacks
         if lemma.endswith("e") and not lemma.endswith("ee"):
             return lemma[:-1] + "ing"
         if len(lemma) > 2 and lemma[-1] not in "aeiou" and lemma[-2] in "aeiou" and lemma[-3] not in "aeiou":
@@ -66,6 +97,11 @@ class StyleFixer:
         return lemma + "ing"
 
     def _fix_tense(self, line: str) -> str:
+        """
+        Shifts sentence tense from future ('will') to progressive present.
+        
+        Example: "We will test" -> "We are testing".
+        """
         if not self.nlp: 
             return line
         doc = self.nlp(line)
@@ -82,6 +118,16 @@ class StyleFixer:
         return working_line
 
     def fix_file(self, file_path: Path, violations: List[Dict[str, Any]]) -> int:
+        """
+        Orchestrates surgical repairs and global enforcement on a single file.
+        
+        Args:
+            file_path: Path to the AsciiDoc output.
+            violations: List of issues identified by the StyleLinter.
+            
+        Returns:
+            int: Total number of lines modified.
+        """
         if not file_path.exists(): 
             return 0
         content = file_path.read_text(encoding="utf-8").splitlines()
@@ -89,7 +135,7 @@ class StyleFixer:
         
         line_map = defaultdict(list)
         for v in violations: 
-            line_map[v["Line"]].append(v)
+            line_map[v.get("Line", 0)].append(v)
 
         patterns = self.config.get("patterns", {})
         extract_re = patterns.get("suggestion_extraction", r"'(.*?)'")
@@ -100,7 +146,7 @@ class StyleFixer:
 
         for line_num in sorted(line_map.keys(), reverse=True):
             idx = line_num - 1
-            if idx >= len(content): 
+            if idx < 0 or idx >= len(content): 
                 continue
             
             working_line = content[idx]
@@ -111,24 +157,24 @@ class StyleFixer:
                 msg = issue.get("Message", "")
                 check_id = issue.get("Check", "")
 
-                # 1. BRANDING (Linter-flagged)
+                # 1. Branding Sync
                 for wrong, correct in session_branding.items():
                     if f"'{wrong}'" in msg.lower() or f"‘{wrong}’" in msg.lower():
                         working_line = re.sub(rf"\b{re.escape(wrong)}\b", correct, working_line, flags=re.IGNORECASE)
 
-                # 2. SURGICAL REMOVAL (e.g., 'very')
+                # 2. Surgical Removal
                 if remove_trigger in msg.lower():
                     targets = re.findall(extract_re, msg)
                     if targets:
                         working_line = re.sub(rf"\b{re.escape(targets[0])}\b\s?", "", working_line, flags=re.IGNORECASE)
 
-                # 3. PHRASAL SUBSTITUTION
+                # 3. Phrasal Substitution
                 elif "instead of" in msg.lower():
                     terms = re.findall(extract_re, msg)
                     if len(terms) >= 2:
                         working_line = re.sub(rf"\b{re.escape(terms[1])}\b", terms[0], working_line, flags=re.IGNORECASE)
 
-                # 4. SPELLING + LEARNING DISCOVERY
+                # 4. Spelling + Learning Discovery
                 elif "Spelling" in check_id:
                     targets = re.findall(extract_re, msg)
                     if targets:
@@ -136,19 +182,16 @@ class StyleFixer:
                         if word.lower() not in session_branding:
                             capitalized = word.capitalize()
                             working_line = re.sub(rf"\b{re.escape(word)}\b", capitalized, working_line, flags=re.IGNORECASE)
-                            # Discovery Log
                             if word.lower() not in self.kb["branding"]:
                                 self.kb["learned"][word.lower()] = capitalized
 
-                # 5. TENSE SHIFT
+                # 5. Tense Shift
                 if check_id == "common.Will":
                     working_line = self._fix_tense(working_line)
 
             # --- PHASE B: GLOBAL ENFORCEMENT PASS ---
-            # Safety net: Fix known branding even if linter missed it (e.g., 'id' -> 'ID')
             for wrong, correct in self.kb.get("branding", {}).items():
                 if re.search(rf"\b{re.escape(wrong)}\b", working_line, flags=re.IGNORECASE):
-                    # We only replace if it's not already exactly correct
                     working_line = re.sub(rf"\b{re.escape(wrong)}\b", correct, working_line)
 
             if working_line != original_line:

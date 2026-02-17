@@ -1,0 +1,40 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Architecture Viewer</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/asciidoctor.js/1.5.9/asciidoctor.min.js"></script>
+        <style>
+            body { font-family: -apple-system, sans-serif; padding: 40px; max-width: 1000px; margin: 0 auto; background: #fff; line-height: 1.5; }
+            .back-link { margin-bottom: 30px; display: inline-block; color: #42b983; text-decoration: none; font-weight: bold; }
+            .back-link:hover { text-decoration: underline; }
+            #content { border-top: 1px solid #eee; padding-top: 20px; }
+        </style>
+    </head>
+    <body>
+        <a href="index.html" class="back-link">← Back to Portal</a>
+        <div id="content">Loading Architecture...</div>
+        <script>
+            const asciidoctor = Asciidoctor();
+            // Fetch the adoc file relative to this html file
+            fetch('System-Architecture.adoc')
+                .then(response => {
+                    if (!response.ok) throw new Error('File not found');
+                    return response.text();
+                })
+                .then(data => {
+                    const html = asciidoctor.convert(data, { 
+                        'attributes': { 'showtitle': true, 'icons': 'font', 'sectanchors': true } 
+                    });
+                    document.getElementById('content').innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById('content').innerHTML = 
+                        '<p style="color:red">Error loading architecture: ' + err.message + 
+                        '<br>Note: Browsers often block local file loading via file://. Run a local server to view this page correctly.</p>';
+                });
+        </script>
+    </body>
+    </html>
+    

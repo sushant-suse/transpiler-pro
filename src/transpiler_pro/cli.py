@@ -1,9 +1,20 @@
-"""Location: src/transpiler_pro/cli.py
-Description: Orchestration Layer for Personal Transpiler-Pro.
-Passes configuration context to core engines to eliminate hardcoded fallbacks.
+"""
+Location: src/transpiler_pro/cli.py
+
+Description: Orchestration Layer for Transpiler-Pro.
+
+This module serves as the primary entry point for the documentation pipeline.
+
+It coordinates:
+
+1. **Sync**: Updating SUSE Style Guides via Git.
+2. **Conversion**: Transforming Markdown to AsciiDoc.
+3. **Linting**: Detecting style violations via Vale.
+4. **Fixing**: Applying NLP-based auto-repairs.
 """
 
 import tomllib
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -16,16 +27,25 @@ from transpiler_pro.core.linter import StyleLinter
 from transpiler_pro.utils.paths import INPUT_DIR, OUTPUT_DIR
 
 app = typer.Typer(
-    name="Personal Transpiler-Pro",
-    help="Enterprise Documentation Pipeline: Adaptive MD-to-ADOC conversion."
+    name="transpiler-pro",
+    help="Enterprise Documentation Pipeline with Autonomous Style Sync.",
+    no_args_is_help=True, 
+    add_completion=False
 )
 console = Console()
 
-# Define the central config path as a single source of truth
 DEFAULT_CONFIG = Path("pyproject.toml")
 
 def load_config(config_path: Path) -> Dict[str, Any]:
-    """Helper to load global pipeline settings from a specific path."""
+    """
+    Loads global pipeline settings from a TOML configuration file.
+    
+    Args:
+        config_path: Path to the `pyproject.toml` file.
+        
+    Returns:
+        A dictionary containing the `tool.transpiler-pro` configuration block.
+    """
     if not config_path.exists():
         return {}
     try:
@@ -34,99 +54,124 @@ def load_config(config_path: Path) -> Dict[str, Any]:
     except Exception:
         return {}
 
-@app.command(name="run")
-def execute_pipeline(
-    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific file"),
-    lint_only: bool = typer.Option(False, "--lint-only", help="Run linter only"),
-    fix: bool = typer.Option(False, "--fix", help="Auto-repair style violations"),
-    config: Path = typer.Option(DEFAULT_CONFIG, "--config", "-c", help="Path to pyproject.toml")
+def sync_styles() -> None:
+    """
+    Synchronizes the SUSE Style Guide submodule with the remote repository.
+    
+    This ensures that the latest enterprise linguistic standards are applied 
+    before the linting phase begins.
+    """
+    console.print("\n[bold blue]Pre-flight:[/] Syncing SUSE Style Guide via Git...")
+    try:
+        subprocess.run(
+            ["git", "submodule", "update", "--init", "--remote", "styles/suse-styles"],
+            check=True, 
+            capture_output=True,
+            text=True
+        )
+        console.print("  [bold green]✓[/] Style guide is synchronized and up-to-date.")
+    except subprocess.CalledProcessError as e:
+        console.print(f"  [bold yellow]⚠️ Warning:[/] Sync failed. Using local cached styles. {e.stderr}")
+    except FileNotFoundError:
+        console.print("  [bold red]Error:[/] Git not found in system path. Skipping sync.")
+
+def run_pipeline(
+    file_name: Optional[str] = None,
+    lint_only: bool = False,
+    fix: bool = False,
+    sync: bool = False,
+    config_path: Path = DEFAULT_CONFIG
 ) -> None:
-    """Executes the conversion, linting, and Auto-Heal workflow using dynamic config."""
+    """
+    The decoupled logic for the transformation and validation pipeline.
     
+    This function allows for direct invocation without CLI-specific 
+    argument validation, facilitating more robust testing.
+    """
+    # 0. Optional Style Sync
+    if sync:
+        sync_styles()
+
     # 1. Load configuration and inject into engines
-    pipeline_config = load_config(config)
-    
-    # DYNAMIC INJECTION: Engines receive the config path so they never use hardcoded fallbacks
-    converter = DocConverter(config_path=config)
-    fixer = StyleFixer(config_path=config)
+    pipeline_config = load_config(config_path)
+    converter = DocConverter(config_path=config_path)
+    fixer = StyleFixer(config_path=config_path)
     
     # 2. Target Detection
     if file_name:
         target_files = [INPUT_DIR / file_name]
     else:
-        # Get extensions from config, with a very thin fallback if config is empty
         exts = pipeline_config.get("pipeline", {}).get("supported_extensions", [".md", ".mdx"])
+        if not INPUT_DIR.exists():
+            console.print(f"[bold yellow]Notification:[/] Directory {INPUT_DIR} not found.")
+            return
         target_files = [p for p in INPUT_DIR.iterdir() if p.suffix in exts]
 
     if not target_files:
-        console.print("[bold yellow]Notification:[/] No source files detected in inputs directory.")
+        console.print("[bold yellow]Notification:[/] No source files detected.")
         return
 
     # 3. Pipeline Execution Loop
     for md_path in target_files:
-        if not md_path.exists():
+        if not md_path.exists(): 
             continue
             
         adoc_path = OUTPUT_DIR / md_path.with_suffix(".adoc").name
         
-        # --- Phase 1: Structural Transformation ---
+        # Phase 1: Conversion
         if not lint_only:
-            console.print(f"\n[bold blue]Phase 1:[/] Transforming [cyan]{md_path.name}[/]")
+            console.print(f"\n[bold blue]Phase 1:[/] Converting [cyan]{md_path.name}[/]")
             try:
                 converter.convert_file(md_path, adoc_path)
             except Exception as e:
-                console.print(f"  [bold red]Error during conversion:[/] {e}")
+                console.print(f"  [bold red]Error:[/] {e}")
                 continue
         
-        # --- Phase 2: Linguistic Validation ---
+        # Phase 2 & 3: Linter & Fixer
         if adoc_path.exists():
-            console.print(f"[bold blue]Phase 2:[/] Validating [cyan]{adoc_path.name}[/] style standards")
-            # Inject config path into Linter
-            linter = StyleLinter(adoc_path, config_path=config)
+            console.print(f"[bold blue]Phase 2:[/] Validating [cyan]{adoc_path.name}[/]")
+            linter = StyleLinter(adoc_path, config_path=config_path)
             linter.setup_config()
             findings = linter.run()
             linter.display_report(findings)
 
-            # --- Phase 3: Automated Repair ---
             if fix and findings:
-                console.print(f"[bold blue]Phase 3:[/] Applying 'Auto-Heal' to [cyan]{adoc_path.name}[/]")
+                console.print(f"[bold blue]Phase 3:[/] Auto-repairing [cyan]{adoc_path.name}[/]")
                 file_key = str(adoc_path.resolve())
                 file_violations = findings.get(file_key, [])
                 
                 if file_violations:
                     repaired_count = fixer.fix_file(adoc_path, file_violations)
                     if repaired_count > 0:
-                        console.print(f"  [bold green]✨ Success:[/] Repaired {repaired_count} violations.")
+                        console.print(f"  [bold green]✨ Repaired {repaired_count} violations.[/]")
                         linter.display_report(linter.run())
 
-@app.command(name="refine")
-def bulk_refine(
-    config: Path = typer.Option(DEFAULT_CONFIG, "--config", "-c")
+@app.command(name="run")
+def execute_pipeline(
+    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific file"),
+    lint_only: bool = typer.Option(False, "--lint-only", help="Run linter only"),
+    fix: bool = typer.Option(False, "--fix", help="Auto-repair style violations"),
+    sync: bool = typer.Option(False, "--sync", help="Sync style guide before execution"),
+    config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c", help="Path to config file")
 ) -> None:
-    """Applies global Antora headers from config to all converted outputs."""
-    pipeline_config = load_config(config)
-    antora_cfg = pipeline_config.get("antora", {})
-    
-    # Dynamic headers from config
-    headers = antora_cfg.get("headers", [])
-    if not headers:
-        return
+    """
+    Executes the main conversion, validation, and auto-heal workflow.
+    """
+    run_pipeline(
+        file_name=file_name,
+        lint_only=lint_only,
+        fix=fix,
+        sync=sync,
+        config_path=Path(config)
+    )
 
-    header_block = "\n".join(headers) + "\n\n"
-    console.print("[bold blue]Phase 4:[/] Injecting Antora headers into output files...")
-    
-    refined_count = 0
-    for adoc_path in OUTPUT_DIR.glob("*.adoc"):
-        content = adoc_path.read_text(encoding="utf-8")
-        if not content.startswith(headers[0]):
-            adoc_path.write_text(header_block + content, encoding="utf-8")
-            console.print(f"  [bold green]✓[/] Refined: [white]{adoc_path.name}[/]")
-            refined_count += 1
-            
-    if refined_count == 0:
-        console.print("  [dim]No new files required refinement.[/]")
+@app.command(name="version")
+def version():
+    """Display the version of Transpiler-Pro."""
+    console.print("Transpiler-Pro v1.0.0")
 
-def main() -> None:
+def main():
+    """Main entry point."""
     app()
 
 if __name__ == "__main__":
