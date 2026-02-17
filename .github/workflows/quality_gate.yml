@@ -29,14 +29,13 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # 1. Fetch latest Vale version and install (Linux)
-          TAG=$(curl -s https://api.github.com/repos/errata-ai/vale/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          echo "Installing Vale v$TAG"
-          curl -L -o vale.deb "https://github.com/errata-ai/vale/releases/download/v${TAG}/vale_${TAG}_Linux_64-bit.deb"
-          sudo dpkg -i vale.deb
+          # 1. Install Vale CLI via official script
+          # This is more reliable than manual .deb downloading
+          curl -fsSL https://install.errata.ai/vale.sh | sh -s -- -b .
+          sudo mv ./vale /usr/local/bin/vale
           vale --version
           
-          # 2. 'uv sync' automatically creates the .venv and installs locked dependencies
+          # 2. 'uv sync' automatically creates the .venv and installs everything
           uv sync --group dev
           
           # 3. Download the specific spaCy model for Phase 2.5 Fixer logic
