@@ -17,15 +17,25 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
       - name: Install Dependencies
-        # 'uv sync' automatically creates the .venv and installs everything
         run: |
+          # Install Vale CLI (Required for Phase 2 Linter logic)
+          sudo apt-get update && sudo apt-get install -y vale
+          
+          # 'uv sync' automatically creates the .venv and installs everything
           uv sync --group dev
+          
+          # Download the specific spaCy model for Phase 2.5 Fixer logic
           uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
       - name: Security Audit
@@ -33,9 +43,9 @@ jobs:
           uv run pip-audit
 
       - name: Run Tests with Coverage
-        # Using 'uv run' ensures we use the .venv created by 'uv sync'
+        # Using '| tee' ensures errors show in the log AND save to the file
         run: |
-          uv run pytest --cov=src --cov-report=term-missing > coverage_report.txt
+          uv run pytest --cov=src --cov-report=term-missing | tee coverage_report.txt
 
       - name: Prepare Coverage Comment
         if: github.event_name == 'pull_request'
