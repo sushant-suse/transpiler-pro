@@ -26,6 +26,9 @@ data/outputs/*
 htmlcov/
 *.egg-info/
 
+# Explicitly allow the documentation version of coverage
+!docs/coverage_report/
+
 # Personal Tracking files
 Project-Structure.txt
 Personal-Tracker.md
