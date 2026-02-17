@@ -15,14 +15,11 @@ jobs:
 
       - name: Install & Setup
         run: |
-          uv venv
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
-          uv sync --group dev
+          uv sync --group dev  # This now installs everything, including pip-audit
 
       - name: Security Audit
         run: |
-          uv pip install pip-audit
-          pip-audit
+          uv run pip-audit  # Run it directly from the synced environment
 
       - name: Run Tests with Coverage
         run: |
