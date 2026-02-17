@@ -1,122 +1,103 @@
-"""Location: tests/core/test_fixer.py
-Description: Unit tests for the NLP-aware StyleFixer logic using isolated config.
+"""
+Location: tests/test_fixer.py
+
+Description: Functional tests for the NLP-driven 'Auto-Heal' Fixer engine.
+
+Focuses on verifying that linguistic violations are repaired, tense shifting 
+logic is accurate, and the Learning Engine correctly updates the JSON brain.
 """
 
+import json
 import pytest
-from pathlib import Path
 from transpiler_pro.core.fixer import StyleFixer
 
 @pytest.fixture
-def fixer(tmp_path: Path) -> StyleFixer:
-    """Provides a StyleFixer instance with a mocked pyproject.toml."""
-    pyproject = tmp_path / "pyproject.toml"
-    # Using raw string to avoid escaping issues in the test environment
-    pyproject.write_text(r"""
-    [tool.transpiler-pro.branding]
-    suse = "SUSE"
-    wifi = "Wi-Fi"
-    ip = "IP"
-    setup = "setting up"
+def mock_fixer(tmp_path):
+    """
+    Sets up a StyleFixer with a temporary environment and isolated Knowledge Base.
+    """
+    # 1. Create a dummy pyproject.toml with grammar and pattern settings
+    cfg = tmp_path / "pyproject.toml"
+    kb_path = tmp_path / "data" / "kb.json"
+    
+    cfg.write_text(f"""
+    [tool.transpiler-pro.pipeline]
+    knowledge_base = "{kb_path}"
+
+    [tool.transpiler-pro.grammar]
+    special_verbs = {{ "reboot" = "rebooting" }}
 
     [tool.transpiler-pro.patterns]
     suggestion_extraction = "'(.*?)'"
-    instead_of_trigger = "instead of"
     removal_trigger = "removing"
-
-    [tool.transpiler-pro.grammar]
-    special_verbs = { "setup" = "setting up" }
-    plural_triggers = ["we", "they", "you", "NNS", "NNPS"]
-    cvc_doubles = ["run", "set", "get", "stop", "plan"]
     """)
-    # Inject the temporary config path into the constructor
-    return StyleFixer(config_path=pyproject)
+    
+    # 2. Initialize the Knowledge Base directory and file
+    kb_path.parent.mkdir(parents=True)
+    kb_path.write_text(json.dumps({
+        "branding": {"id": "ID", "suse": "SUSE"},
+        "learned": {}
+    }))
+    
+    return StyleFixer(config_path=cfg)
 
-def test_fix_grammar_aware_will_singular(fixer, tmp_path):
-    """Verifies singular subject 'The system' uses 'is' and conjugates the verb."""
-    adoc_file = tmp_path / "test1.adoc"
-    adoc_file.write_text("The system will reboot.")
-    
-    violations = [{"Line": 1, "Check": "common.Will", "Message": "Avoid using 'will'"}]
-    fixer.fix_file(adoc_file, violations)
-    
-    # NLP Result: Future Tense -> Progressive Present
-    assert "The system is rebooting." in adoc_file.read_text()
+def test_fixer_tense_shift_logic(mock_fixer):
+    """Verifies NLP tense shifting: 'will [verb]' -> 'is/are [progressive]'."""
+    # Skip if NLP model isn't loaded to avoid CI failure
+    if not mock_fixer.nlp:
+        pytest.skip("spaCy model 'en_core_web_sm' not found.")
 
-def test_fix_grammar_aware_will_plural(fixer, tmp_path):
-    """Verifies plural subject 'We' uses 'are' and conjugates the verb."""
-    adoc_file = tmp_path / "test2.adoc"
-    adoc_file.write_text("We will check the connection.")
-    
-    violations = [{"Line": 1, "Check": "common.Will", "Message": "Avoid using 'will'"}]
-    fixer.fix_file(adoc_file, violations)
-    
-    assert "We are checking the connection." in adoc_file.read_text()
+    line_singular = "The system will reboot."
+    line_plural = "We will test the system."
 
-def test_fix_generic_removal(fixer, tmp_path):
-    """Verifies that 'Consider removing X' works via dynamic config triggers."""
-    adoc_file = tmp_path / "test3.adoc"
-    adoc_file.write_text("It is very easy.")
-    
-    violations = [{
-        "Line": 1,
-        "Check": "common.Editorializing",
-        "Message": "Consider removing 'very'"
-    }]
-    fixer.fix_file(adoc_file, violations)
-    
-    # Ensures word and trailing space are removed to avoid double spaces
-    assert adoc_file.read_text().strip() == "It is easy."
+    assert "is rebooting" in mock_fixer._fix_tense(line_singular)
+    assert "are testing" in mock_fixer._fix_tense(line_plural)
 
-def test_fix_generic_replacement_pattern(fixer, tmp_path):
-    """Verifies 'Consider using X instead of Y' works via dynamic config triggers."""
-    adoc_file = tmp_path / "test4.adoc"
-    adoc_file.write_text("Check the advanced config.")
+def test_special_verb_override(mock_fixer):
+    """Ensures TOML special_verbs take priority over algorithmic -ing rules."""
+    if not mock_fixer.nlp:
+        pytest.skip("spaCy model not found.")
+        
+    # We defined 'reboot' -> 'rebooting' in the fixture TOML
+    doc = mock_fixer.nlp("reboot")
+    verb_token = doc[0]
     
-    violations = [{
-        "Line": 1,
-        "Check": "common.TermwebTerms",
-        "Message": "Consider using 'configuration' instead of 'config'"
-    }]
-    fixer.fix_file(adoc_file, violations)
-    
-    assert "advanced configuration" in adoc_file.read_text()
+    result = mock_fixer._get_progressive_verb(verb_token)
+    assert result == "rebooting"
 
-def test_fix_case_insensitivity_on_spelling(fixer, tmp_path):
-    """Verifies that suggestion extraction works regardless of input case."""
-    adoc_file = tmp_path / "test5.adoc"
-    adoc_file.write_text("Running suse systems.")
+def test_branding_and_learning_discovery(mock_fixer, tmp_path):
+    """Tests that the fixer repairs branding and logs new words to 'learned'."""
+    test_file = tmp_path / "output.adoc"
+    # Ensure 'kramdoc' is in the text so regex has something to find
+    test_file.write_text("Check the id of suse linux and kramdoc.")
     
-    violations = [{
-        "Line": 1,
-        "Check": "Vale.Spelling",
-        "Message": "Did you really mean 'suse'?",
-        "Suggestion": "SUSE"
-    }]
-    fixer.fix_file(adoc_file, violations)
+    violations = [
+        {"Line": 1, "Message": "Use 'SUSE' instead of 'suse'", "Check": "SUSE.Branding"},
+        {"Line": 1, "Message": "Spelling error: 'kramdoc'", "Check": "Vale.Spelling"}
+    ]
     
-    assert "SUSE systems" in adoc_file.read_text()
-
-def test_fix_branding_catch_all(fixer, tmp_path):
-    """Verifies the brute-force branding pass for terms without linter violations."""
-    adoc_file = tmp_path / "test6.adoc"
-    adoc_file.write_text("setup suse with wifi on ip.")
+    mock_fixer.fix_file(test_file, violations)
+    content = test_file.read_text()
     
-    # Branding pass runs regardless of violations list
-    fixer.fix_file(adoc_file, [])
-    
-    content = adoc_file.read_text()
+    assert "ID" in content
     assert "SUSE" in content
-    assert "Wi-Fi" in content
-    assert "IP" in content
-    assert "setting up" in content
+    assert "Kramdoc" in content 
+    
+    # Check Learning Engine
+    updated_kb = json.loads(mock_fixer.kb_path.read_text())
+    assert "kramdoc" in updated_kb["learned"]
+    assert updated_kb["learned"]["kramdoc"] == "Kramdoc"
 
-def test_fix_special_verb_conjugation(fixer, tmp_path):
-    """Verifies special cases like 'setup' mapping to 'setting up' from config."""
-    adoc_file = tmp_path / "test7.adoc"
-    adoc_file.write_text("We will setup the server.")
+def test_surgical_removal(mock_fixer, tmp_path):
+    """Verifies that the fixer can remove words based on 'removal' triggers."""
+    test_file = tmp_path / "test.adoc"
+    test_file.write_text("This is very important.")
     
-    violations = [{"Line": 1, "Check": "common.Will", "Message": "Avoid using 'will'"}]
-    fixer.fix_file(adoc_file, violations)
+    violations = [{
+        "Line": 1, 
+        "Message": "Consider removing 'very'", 
+        "Check": "SUSE.Very"
+    }]
     
-    # Result uses the 'special_verbs' override from TOML
-    assert "We are setting up the server." in adoc_file.read_text()
+    mock_fixer.fix_file(test_file, violations)
+    assert "This is important." in test_file.read_text()

@@ -1,6 +1,11 @@
-"""Location: src/transpiler_pro/core/linter.py
-Description: Data-driven StyleLinter. Orchestrates Vale validation without
-hardcoded style names, colors, or extraction fallbacks.
+"""
+Location: src/transpiler_pro/core/linter.py
+
+Description: Style Validation Engine for Transpiler-Pro.
+
+This module provides the `StyleLinter` class, which orchestrates linguistic 
+checks using the Vale CLI. It dynamically generates configuration on-the-fly 
+based on settings defined in `pyproject.toml`.
 """
 
 import json
@@ -19,7 +24,14 @@ from transpiler_pro.utils.paths import STYLES_DIR
 console = Console()
 
 class StyleLinter:
-    """Orchestrates style validation using externalized configurations."""
+    """
+    Orchestrates style validation using externalized configurations and Vale.
+    
+    Attributes:
+        target_path (Path): The file to be linted.
+        config_path (Path): Path to the project configuration.
+        vale_ini (Path): The temporary configuration file generated for Vale.
+    """
 
     def __init__(self, target_path: Path, config_path: Optional[Path] = None):
         """Initializes the linter with path isolation for configuration."""
@@ -32,7 +44,7 @@ class StyleLinter:
         self.config = self._load_project_config()
         self.guide_url = self.config.get("meta", {}).get("guide_url", "")
 
-    def _load_project_config(self) -> dict:
+    def _load_project_config(self) -> Dict[str, Any]:
         """Loads linter-specific metadata from the dynamic config path."""
         if not self.config_path.exists():
             return {}
@@ -43,13 +55,15 @@ class StyleLinter:
             return {}
 
     def setup_config(self) -> None:
-        """Generates Vale config using dynamic styles and levels from TOML."""
-        linter_cfg = self.config.get("linter", {})
+        """
+        Generates a `.vale.ini` file using dynamic styles and levels from TOML.
         
-        # Ensure the styles path uses forward slashes for cross-platform Vale
+        This allows the linter to adapt to different style guides (like SUSE) 
+        without hardcoded paths.
+        """
+        linter_cfg = self.config.get("linter", {})
         styles_root = str(STYLES_DIR.resolve()).replace("\\", "/")
         
-        # ZERO HARDCODING: Fallback to empty list if config is missing styles
         styles = linter_cfg.get("styles", [])
         styles_str = ", ".join(styles) if styles else "Vale"
         min_level = linter_cfg.get("min_alert_level", "suggestion")
@@ -65,22 +79,17 @@ class StyleLinter:
         self.vale_ini.write_text(textwrap.dedent(config_raw).strip())
 
     def _extract_suggestion(self, issue: Dict[str, Any]) -> str:
-        """Dynamic extraction logic based on patterns provided in config."""
+        """Extracts a repair suggestion from a Vale issue using TOML-defined patterns."""
         action_params = issue.get("Action", {}).get("Params", [])
         patterns_cfg = self.config.get("patterns", {})
-        
-        # Get ignored placeholders from TOML (e.g., 'spellings')
         ignored = patterns_cfg.get("ignored_placeholders", [])
         
-        # 1. Action Param check
         if action_params:
             candidate = str(action_params[0])
             if candidate not in ignored:
                 return candidate
 
-        # 2. Regex-based extraction from Message/Description
         search_pool = issue.get("Description", "") + " " + issue.get("Message", "")
-        # Zero Hardcoding: regex pattern must be provided in TOML
         pattern = patterns_cfg.get("suggestion_extraction")
         
         if pattern and search_pool.strip():
@@ -91,7 +100,12 @@ class StyleLinter:
         return ""
 
     def run(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Executes Vale and processes findings into a generic format."""
+        """
+        Executes the Vale CLI and processes findings into a standardized format.
+        
+        Returns:
+            A dictionary where keys are file paths and values are lists of issues.
+        """
         try:
             abs_target = str(self.target_path.resolve())
             
@@ -126,13 +140,12 @@ class StyleLinter:
             return {}
 
     def display_report(self, data: Dict[str, List[Dict[str, Any]]]) -> None:
-        """Renders the report with dynamic colors and themes from config."""
+        """Renders a visual Rich table of violations found in the documentation."""
         if not data or not any(data.values()):
             console.print("\n✨ [bold green]Quality Check Passed[/]")
             return
 
         linter_cfg = self.config.get("linter", {})
-        # Dynamic Color Mapping from TOML
         theme = linter_cfg.get("theme", {
             "error": "red", 
             "warning": "yellow", 
