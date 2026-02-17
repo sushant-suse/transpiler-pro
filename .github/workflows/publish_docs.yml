@@ -12,17 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive' # Ensure SUSE styles are pulled
+
       - uses: astral-sh/setup-uv@v5
-      
-      - name: Build Docs
+
+      - name: Build Unified Portal
         run: |
-          uv venv
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
           uv sync --group dev
-          uv run pdoc ./src/transpiler_pro -o ./public
+          uv run python -m spacy download en_core_web_sm
+          # Run your custom engine to generate EVERYTHING into ./docs
+          uv run python docs.py 
           
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: public
+          folder: docs # Change this to 'docs' to match your docs.py output
           branch: gh-pages
