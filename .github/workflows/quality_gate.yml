@@ -13,7 +13,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          # This tells Git to actually use the .gitmodules file we just fixed
           submodules: recursive
           fetch-depth: 0
 
@@ -29,16 +28,26 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # 1. Install Vale CLI via official script
-          # This is more reliable than manual .deb downloading
-          curl -fsSL https://install.errata.ai/vale.sh | sh -s -- -b .
-          sudo mv ./vale /usr/local/bin/vale
+          # 1. Install Vale CLI (Hardened against HTTP/2 and network flakiness)
+          # --http1.1 prevents the protocol error
+          # --retry-all-errors handles transient CDN issues
+          curl --http1.1 -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+            https://install.errata.ai/vale.sh | sh -s -- -b .
+
+          # Verify the binary exists before proceeding
+          if [ ! -f ./vale ]; then
+            echo "ERROR: Vale binary was not downloaded successfully."
+            exit 1
+          fi
+
+          # Use 'install' to set permissions and move to path in one go
+          sudo install -m 0755 ./vale /usr/local/bin/vale
           vale --version
           
-          # 2. 'uv sync' automatically creates the .venv and installs everything
+          # 2. 'uv sync' handles environment and dependencies
           uv sync --group dev
           
-          # 3. Download the specific spaCy model for Phase 2.5 Fixer logic
+          # 3. Download the specific spaCy model
           uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
       - name: Security Audit
@@ -46,7 +55,6 @@ jobs:
           uv run pip-audit
 
       - name: Run Tests with Coverage
-        # Using '| tee' ensures errors show in the log AND save to the file
         run: |
           uv run pytest --cov=src --cov-report=term-missing | tee coverage_report.txt
 
