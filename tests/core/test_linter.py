@@ -1,102 +1,91 @@
-"""Location: tests/core/test_linter.py.
-
-Description: Unit test suite for the StyleLinter engine.
-Validates configuration generation, Vale CLI integration, and 
-JSON report parsing for the Personal Transpiler-Pro pipeline.
+"""Location: tests/core/test_linter.py
+Description: Unit test suite for the robust, config-driven StyleLinter engine.
 """
 
+import json
 from pathlib import Path
-
 import pytest
-
 from transpiler_pro.core.linter import StyleLinter
-
 
 @pytest.fixture
 def linter(tmp_path: Path) -> StyleLinter:
-    """Provides a StyleLinter instance targeting a temporary file.
-    
-    Args:
-        tmp_path (Path): Pytest fixture for a temporary directory.
+    """Provides a StyleLinter instance with a mocked pyproject.toml and isolated paths."""
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text("""
+[tool.transpiler-pro.linter]
+styles = ["Vale", "custom_style"]
+min_alert_level = "warning"
 
-    Returns:
-        StyleLinter: A linter instance isolated from production data.
-    """
+[tool.transpiler-pro.patterns]
+suggestion_extraction = "'(.*?)'"
+ignored_placeholders = ["placeholder_text"]
+    """)
+    
     test_file = tmp_path / "test.adoc"
     test_file.write_text("This is a test document.")
-    return StyleLinter(test_file)
-
-
-def test_config_generation(linter: StyleLinter):
-    """Verifies that setup_config correctly generates a .vale.ini file.
     
-    Checks for the presence of mandatory SUSE-style paths and the 
-    correct alert level threshold in the generated configuration.
-    """
+    # PASS THE PATH: This links the class to the temporary test config
+    return StyleLinter(test_file, config_path=pyproject)
+
+def test_config_generation_robust(linter: StyleLinter):
+    """Verifies that setup_config correctly interprets the mock TOML."""
     linter.setup_config()
-    
     assert linter.vale_ini.exists()
+    
     config_content = linter.vale_ini.read_text()
     
-    # Check for essential configuration keys
-    assert "StylesPath" in config_content
-    assert "BasedOnStyles = Vale, config, common, asciidoc" in config_content
-    assert "MinAlertLevel = suggestion" in config_content
+    # Validates that StylesPath is absolute and BasedOnStyles matches TOML
+    assert "BasedOnStyles = Vale, custom_style" in config_content
+    assert "MinAlertLevel = warning" in config_content
 
-
-def test_report_display_logic(linter: StyleLinter, capsys):
-    """Checks display_report handles empty data sets gracefully.
+def test_suggestion_extraction_from_pattern(linter: StyleLinter):
+    """Validates that 'ignored_placeholders' triggers the regex fallback."""
+    mock_issue = {
+        "Description": "Please use 'Technical Term' instead of 'tt'.",
+        "Message": "Style violation",
+        "Action": {"Params": ["placeholder_text"]} 
+    }
     
-    Ensures that the linter provides a positive feedback message 
-    when no violations are found, rather than crashing or being silent.
-    """
-    empty_data = {}
-    linter.display_report(empty_data)
-    
-    captured = capsys.readouterr()
-    assert "No style violations detected" in captured.out
+    # Logic: 'placeholder_text' is in the ignored list, so it must use regex to find 'Technical Term'
+    suggestion = linter._extract_suggestion(mock_issue)
+    assert suggestion == "Technical Term"
 
-
-def test_json_parsing_resilience(linter: StyleLinter):
-    """Ensures the report logic can handle the nested Vale JSON structure.
-    
-    Validates that the specific keys (Line, Severity, Message, Check) 
-    are correctly indexed from the simulated Vale CLI output.
-    """
-    # Mock data representing a typical Vale violation report
-    mock_vale_json = {
+def test_vale_run_processing(linter: StyleLinter, monkeypatch):
+    """Verifies full processing loop from mocked Vale output to findings dict."""
+    mock_vale_raw = {
         "test.adoc": [
             {
                 "Line": 5,
-                "Severity": "warning",
-                "Message": "Use 'Wi-Fi' instead of 'wifi'",
-                "Check": "Vale.Spelling"
+                "Check": "Rule.One",
+                "Severity": "error",
+                "Message": "Error found",
+                "Description": "Use 'Correct' instead.",
+                "Action": {"Params": ["placeholder_text"]}
             }
         ]
     }
-    
-    issues = mock_vale_json["test.adoc"]
-    assert len(issues) == 1
-    assert issues[0]["Check"] == "Vale.Spelling"
-    assert issues[0]["Line"] == 5
 
+    class MockResult:
+        stdout = json.dumps(mock_vale_raw)
+        stderr = ""
 
-def test_severity_color_mapping(linter: StyleLinter):
-    """Validates that the linter identifies all three severity levels.
+    # Monkeypatch subprocess to return our JSON blob
+    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: MockResult())
+
+    findings = linter.run()
     
-    Ensures that errors, warnings, and suggestions are all correctly 
-    categorized for subsequent visual table rendering.
-    """
-    mock_data = {
-        "file.adoc": [
-            {"Severity": "error", "Line": 1, "Message": "Critical", "Check": "Rule1"},
-            {"Severity": "warning", "Line": 2, "Message": "Alert", "Check": "Rule2"},
-            {"Severity": "suggestion", "Line": 3, "Message": "Hint", "Check": "Rule3"}
-        ]
+    # We use file_path.name or resolution depending on Vale version
+    # Here we check that the suggestion was successfully extracted from Description
+    assert any("Correct" in issue["Suggestion"] for file in findings.values() for issue in file)
+
+def test_extract_suggestion_priority(linter: StyleLinter):
+    """Verifies that valid Action Params are preferred over regex fallback."""
+    mock_issue = {
+        "Description": "General error",
+        "Message": "Use 'IgnoreMe' instead.",
+        "Action": {"Params": ["PriorityValue"]}
     }
     
-    severities = [issue["Severity"] for issue in mock_data["file.adoc"]]
-    assert "error" in severities
-    assert "warning" in severities
-    assert "suggestion" in severities
-    
+    # 'PriorityValue' is not in 'ignored_placeholders', so it should be used directly
+    suggestion = linter._extract_suggestion(mock_issue)
+    assert suggestion == "PriorityValue"

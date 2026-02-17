@@ -4,13 +4,11 @@ A high-fidelity documentation transpiler designed to convert **Markdown** into *
 
 ## 📌 Project Overview
 
-This project solves the "hallucination" and formatting breakage issues common in standard conversion tools (like Pandoc or kramdoc) when dealing with complex UI components like admonitions, collapsible blocks, and cross-references. It uses a **Three-Step Pipeline**:
+Transpiler-Pro is an enterprise-grade utility that goes beyond standard conversion. It uses a **Smart Multi-Phase Pipeline** to transform, validate and contextually repair technical documentation.
 
-1. **Pre-processing**: Shields complex Markdown components using unique text markers.
-2. **Transpilation**: Utilizes `kramdoc` for standard element conversion (tables, headers, bold/italic).
-3. **Post-processing**: Deterministically reconstructs protected components into perfect AsciiDoc syntax.
-
-Refer to the [System Architecture document](System-Architecture.md) for an in-depth breakdown of the code structure, module interactions, and data flow.
+1. **Phase 1: Transformation** – Shields Markdown components (admonitions/collapsibles) and utilizes `kramdoc` for structural transpilation.
+2. **Phase 2: Validation** – Integrates the **Vale CLI** with a comprehensive suite of official SUSE styles to detect linguistic and technical errors.
+3. **Phase 3: Auto-Heal & Learning** – Uses **spaCy NLP** for grammatical repair and a dynamic **Knowledge Base** to enforce branding and "learn" new terminology on the fly.
 
 ## 📂 Folder Structure
 
@@ -18,71 +16,81 @@ Refer to the [System Architecture document](System-Architecture.md) for an in-de
 .
 ├── src/transpiler_pro/
 │   ├── core/
-│   │   ├── converter.py    # Main engine: Pre/Post-processing & kramdoc wrapper
-│   │   ├── linter.py       # Vale integration for SUSE style checking
-│   │   ├── navigator.py    # (Planned) Directory traversal logic
-│   │   └── fixer.py        # (Next Phase) Deterministic style repair
-│   ├── utils/
-│   │   └── paths.py        # Path management utilities
-│   └── cli.py              # Typer-based Command Line Interface
-├── styles/suse-styles/     # Official SUSE Vale rulesets and dictionaries
+│   │   ├── converter.py    # Structural transformation & block restoration
+│   │   ├── linter.py       # Style sensing via Vale CLI
+│   │   └── fixer.py        # NLP-driven repair & Knowledge Base management
+│   ├── utils/              # Project-wide path management
+│   └── cli.py              # Typer-based orchestration & Antora refinement
+├── styles/suse-styles/     # Official SUSE Vale rulesets (common, asciidoc, etc.)
 ├── data/
 │   ├── inputs/             # Source .md files
-│   └── outputs/            # Transpiled .adoc files
-└── tests/                  # Pytest suite for structural integrity
+│   ├── outputs/            # Transpiled and "healed" .adoc files
+│   └── knowledge_base.json # The "Brain": Persistent branding & learned terms
+├── docs/                   # Auto-generated project documentation (HTML)
+├── tests/                  # Pytest suite with 100% logic coverage
+└── pyproject.toml          # Central configuration & NLP special verbs
 ```
 
-## ✨ Features Implemented (Phase 1)
+## ✨ Key Features
 
-### 1. Advanced Component Mapping
+### 1. NLP-Driven Grammar Repair
 
-| Markdown | AsciiDoc (Antora) | Implementation Detail |
-| --- | --- | --- |
-| `:::info` / `:::tip` | `[IMPORTANT]` / `[TIP]` | Converts to full block delimiters (`====`) |
-| `> **Note**:` | `[NOTE]` | Promotes blockquotes to formal Admonition blocks |
-| `<details><summary>` | `[%collapsible]` | Preserves summary text as the block title |
-| `[Title](./file.md)` | `xref:file.adoc[Title]` | Normalizes paths and strips leading `./` |
-| `***bold-italic***` | `*_bold-italic_*` | Fixes complex nested formatting |
+Unlike basic find-and-replace tools, Transpiler-Pro uses **Dependency Parsing** to ensure grammatical correctness:
 
-### 2. Structural Fixes
+* **Intelligent Tense Shift**: Automatically converts future-tense "will" into the progressive present. It identifies subjects to choose between "is" and "are" (for example, *The system is* vs *Users are*).
+* **CVC Verb Doubling**: Corrects verb endings dynamically (for example, *run* -> *running*), with data driven overrides in `pyproject.toml` (for example, *setup* -> *setting up*).
 
-* **Header Protection**: Prevents syntax collisions by converting headers inside Admonitions into bold text.
-* **List Normalization**: Fixes nesting depth in mixed lists (for example, numbered items inside bullets).
-* **Path Sanitization**: Automatically strips redundant `./` from cross-references for Antora compliance.
-* **Whitespace Management**: Collapses triple-newlines and ensures tight attribute-to-block alignment.
+### 2. Self-Learning Knowledge Base
 
-## 🛠 Installation & Usage
+The tool features a **Discovery Engine**. If the linter flags a spelling error not present in the Knowledge Base:
+
+* It applies a capitalization fallback.
+* It **logs the new word** to `data/knowledge_base.json` for future sessions.
+* **Global Enforcement**: It forces branding (like `SUSE`, `Wi-Fi`, `ID`) even if the linter fails to flag the word.
+
+### 3. Structural Block Restoration
+
+High-fidelity mapping of complex Markdown components to AsciiDoc:
+
+* **Admonitions**: Converts `:::info` blocks to full `[IMPORTANT]` AsciiDoc blocks with delimiters.
+* **Collapsibles**: Maps `<details>` to Antora `[%collapsible]` blocks.
+* **XREFs**: Normalizes Markdown links into Antora-compliant `xref:file.adoc[]` format.
+
+## 🛠 Installation & Setup
 
 ### Prerequisites
 
-* [Python 3.13+](https://www.python.org/)
-* [uv](https://github.com/astral-sh/uv) (Package manager)
-* [kramdoc](https://github.com/asciidoctor/kramdown-asciidoc) (`gem install kramdown-asciidoc`)
-* [Vale](https://vale.sh/) (Style linter)
+* **Python 3.12+**
+* **uv** (Python package manager)
+* **kramdoc** (`gem install kramdown-asciidoc`)
+* **Vale** (`brew install vale`)
 
 ### Setup
 
 ```bash
-# Install dependencies
+# 1. Sync dependencies
 uv sync
+
+# 2. Download the NLP Grammar Model
+uv run python -m spacy download en_core_web_sm
 ```
 
-### Running the Transpiler
+## 🚀 Usage
 
-To convert a single file and run the SUSE style linter:
+### Transpilation & Repair
 
 ```bash
-uv run transpile run --file <filepath>
-# Example
-uv run transpile run --file data/inputs/test.md
+# Convert, Validate, and Auto-Fix a specific file
+uv run transpiler-pro run --file data/inputs/sample.md --fix
+
+# Run on all files in the input directory
+uv run transpiler-pro run --all --fix
 ```
 
-Output will be saved as `data/outputs/` with a terminal report of any style violations.
+### Testing
 
-## 🔍 Validation Workflow
+```bash
+# Run the full logic test suite
+uv run pytest
+```
 
-The tool currently implements a **Convert-then-Lint** strategy:
-
-1. **Conversion**: Generates the `.adoc` file in `data/outputs/`.
-2. **Linting**: Automatically triggers **Vale** using the rules in `styles/suse-styles/`.
-3. **Reporting**: Prints a color-coded report to the terminal identifying style violations (for example, `wifi` vs `Wi-Fi`, or use of future tense `will`).

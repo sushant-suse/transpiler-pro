@@ -1,56 +1,75 @@
 [project]
 name = "transpiler-pro"
 version = "1.0.0"
-description = "Enterprise-grade deterministic Markdown to AsciiDoc transpiler with SUSE style validation."
-authors = [
-    { name = "Sushant Gaurav" }
-]
-readme = "README.md"
-requires-python = ">=3.11"
+description = "Enterprise MD-to-ADOC conversion pipeline with SUSE learning engine"
+requires-python = "==3.12.*"
+authors = [{name = "Sushant Gaurav", email = "sushant-gaurav@suse.com"}]
 dependencies = [
-    "rich>=13.0.0",
     "typer>=0.12.0",
-    "pydantic>=2.0",
+    "rich>=13.0.0",
+    "spacy>=3.7.0",
+    "pytest>=8.0.0"
 ]
 
 [project.scripts]
-# This maps the 'transpile' command directly to our CLI entry point
-transpile = "transpiler_pro.cli:main"
+transpiler-pro = "transpiler_pro.cli:main"
 
+# --- CI & BUILD FIXES ---
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0",
-    "pytest-cov>=4.0",
+    "pytest-cov>=5.0.0",
+    "pip-audit>=2.7.0",
     "ruff>=0.3.0",
-    "pdoc>=14.0.0",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/transpiler_pro"]
+[tool.uv]
+package = true
+# ------------------------
 
-[tool.ruff]
-# Standardized to 110 to accommodate Rich console prints and regex
-line-length = 110
-target-version = "py313"
-src = ["src", "tests"]
+[tool.transpiler-pro.pipeline]
+supported_extensions = [".md", ".mdx"]
+# The "Brain" of the operation: external JSON for massive branding/fallbacks
+knowledge_base = "data/knowledge_base.json"
 
-[tool.ruff.lint]
-# E: Error, F: Pyflakes, I: Isort (import sorting), D: Docstrings
-select = ["E", "F", "I", "D"]
-ignore = [
-    "D100", # Missing docstring in public module
-    "D104", # Missing docstring in public package
-    "D107", # Missing docstring in __init__ (covered by class docstrings)
-    "D205", # 1 blank line required between summary and description (optional, but helps speed)
-    "E501", # Ignore line length for regex and terminal messages
+[tool.transpiler-pro.grammar]
+special_verbs = { "setup" = "setting up", "stop" = "stopping", "check" = "checking", "reboot" = "rebooting", "backup" = "backing up", "fix" = "fixing", "finish" = "finishing" }
+
+[tool.transpiler-pro.linter]
+styles = ["Vale", "common", "asciidoc", "config"]
+min_alert_level = "suggestion"
+supported_formats = ["adoc", "md"]
+report_title = "SUSE Style Guide Validation Report"
+theme = { error = "red", warning = "yellow", suggestion = "blue" }
+
+[tool.transpiler-pro.patterns]
+suggestion_extraction = "['\"‘“’\u2018\u2019\u201c\u201d](.*?)['\"’\u2018\u2019\u201c\u201d]"
+instead_of_trigger = "instead of"
+removal_trigger = "removing"
+
+[tool.transpiler-pro.conversions]
+extension_map = { md = "adoc", mdx = "adoc" }
+path_normalization = [{ regex = "^\\./", replacement = "" }]
+
+# PHASE 1: SHIELDING (Markdown -> Marker)
+shielding_patterns = [
+    { regex = ":::(?P<type>\\w+)\\n(?P<body>.*?)\\n:::", replacement = "MARKER_ADMON_START_\\1\n\\2\nMARKER_ADMON_END" },
+    { regex = "<details>\\s*<summary>(.*?)</summary>\\s*(.*?)\\s*</details>", replacement = "MARKER_COLL_START_\\1\n\\2\nMARKER_COLL_END", hook = "protect_spaces" }
 ]
 
-[tool.ruff.lint.pydocstyle]
-convention = "google" # Enforce Google-style docstrings
+# PHASE 2: RESTORATION (Marker -> AsciiDoc)
+restoration_patterns = [
+    { regex = "(?s)MARKER_ADMON_START_{key}\\s+(.*?)\\s+MARKER_ADMON_END", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
+    { regex = "(?s)MARKER_COLL_START_(.*?)\\n(.*?)\\nMARKER_COLL_END", replacement = ".\\1\n[%collapsible]\n======\n\\2\n======", hook = "restore_spaces" }
+]
 
-[tool.ruff.lint.isort]
-known-first-party = ["transpiler_pro"]
+# PHASE 3: CLEANUP
+cleanup_regex = [
+    { regex = "^:.*?\\n", replacement = "", flags = "M" }
+]
+
+[tool.transpiler-pro.antora]
+headers = [":experimental:", ":toc:", ":icons: font"]

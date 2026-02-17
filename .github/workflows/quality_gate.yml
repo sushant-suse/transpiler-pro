@@ -10,23 +10,49 @@ jobs:
   test-and-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
-      - name: Install & Setup
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Dependencies
         run: |
-          uv venv
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          set -euo pipefail
+
+          # 1. Install Vale (Pinned version via GitHub Releases for 100% reliability)
+          VALE_VERSION="3.7.1"
+          curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+            -o vale.tar.gz \
+            "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"
+          
+          tar -xzf vale.tar.gz vale
+          sudo install -m 0755 ./vale /usr/local/bin/vale
+          vale --version
+
+          # 2. 'uv sync' handles environment and dependencies
           uv sync --group dev
+
+          # 3. Download the specific spaCy model
+          uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
       - name: Security Audit
         run: |
-          uv pip install pip-audit
-          pip-audit
+          uv run pip-audit
 
       - name: Run Tests with Coverage
         run: |
-          uv run pytest --cov=src --cov-report=term-missing > coverage_report.txt
+          uv run pytest --cov=src --cov-report=term-missing | tee coverage_report.txt
 
       - name: Prepare Coverage Comment
         if: github.event_name == 'pull_request'

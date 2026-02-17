@@ -1,106 +1,143 @@
 """Location: src/transpiler_pro/core/linter.py
-Description: The automated style validation engine for Personal Transpiler-Pro.
-Integrates the Vale CLI with custom SUSE-standard rulesets to perform 
-heuristic analysis on converted AsciiDoc content.
+Description: Data-driven StyleLinter. Orchestrates Vale validation without
+hardcoded style names, colors, or extraction fallbacks.
 """
 
 import json
+import re
 import subprocess
 import textwrap
+import tomllib
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.table import Table
 
-from transpiler_pro.utils.paths import BASE_DIR, STYLES_DIR
+from transpiler_pro.utils.paths import STYLES_DIR
 
 console = Console()
 
 class StyleLinter:
-    """Orchestrates the style validation phase using the Vale linting engine.
-    
-    This class manages the lifecycle of the linter configuration, executes 
-    rule-based checks against converted documents, and generates visual reports.
-    """
+    """Orchestrates style validation using externalized configurations."""
 
-    def __init__(self, target_path: Path):
-        """Initializes the linter for a specific document.
-        
-        Args:
-            target_path (Path): Path to the .adoc or .md file to be validated.
-        """
+    def __init__(self, target_path: Path, config_path: Optional[Path] = None):
+        """Initializes the linter with path isolation for configuration."""
         self.target_path = target_path
-        self.vale_ini: Path = BASE_DIR / ".vale.ini"
-        self.guide_url: str = "https://documentation.suse.com/style/current/html/style-guide-adoc/index.html"
+        self.config_path = config_path or Path("pyproject.toml")
+        
+        # Isolation: .vale.ini generated in context of current config
+        self.vale_ini: Path = self.config_path.parent / ".vale.ini"
+        
+        self.config = self._load_project_config()
+        self.guide_url = self.config.get("meta", {}).get("guide_url", "")
+
+    def _load_project_config(self) -> dict:
+        """Loads linter-specific metadata from the dynamic config path."""
+        if not self.config_path.exists():
+            return {}
+        try:
+            with open(self.config_path, "rb") as f:
+                return tomllib.load(f).get("tool", {}).get("transpiler-pro", {})
+        except Exception:
+            return {}
 
     def setup_config(self) -> None:
-        """Dynamically generates a Vale configuration file (.vale.ini) tailored
-        to the project's style requirements and local paths.
-        """
-        styles_root = STYLES_DIR 
+        """Generates Vale config using dynamic styles and levels from TOML."""
+        linter_cfg = self.config.get("linter", {})
         
-        # Maintenance: Remove conflicting default spelling rules to prioritize 
-        # the specialized SUSE dictionary.
-        spelling_file = styles_root / "common" / "Spelling.yml"
-        if spelling_file.exists():
-            spelling_file.unlink()
+        # Ensure the styles path uses forward slashes for cross-platform Vale
+        styles_root = str(STYLES_DIR.resolve()).replace("\\", "/")
+        
+        # ZERO HARDCODING: Fallback to empty list if config is missing styles
+        styles = linter_cfg.get("styles", [])
+        styles_str = ", ".join(styles) if styles else "Vale"
+        min_level = linter_cfg.get("min_alert_level", "suggestion")
 
-        # Define the linting environment
-        # 'config', 'common', and 'asciidoc' refer to the SUSE-specific YAML rulesets.
         config_raw = f"""
         StylesPath = {styles_root}
-        MinAlertLevel = suggestion
+        MinAlertLevel = {min_level}
 
         [*.{{adoc,md}}]
-        BasedOnStyles = Vale, config, common, asciidoc
+        BasedOnStyles = {styles_str}
         """
         
         self.vale_ini.write_text(textwrap.dedent(config_raw).strip())
 
-    def run(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Executes the Vale CLI against the target document and parses the result.
+    def _extract_suggestion(self, issue: Dict[str, Any]) -> str:
+        """Dynamic extraction logic based on patterns provided in config."""
+        action_params = issue.get("Action", {}).get("Params", [])
+        patterns_cfg = self.config.get("patterns", {})
+        
+        # Get ignored placeholders from TOML (e.g., 'spellings')
+        ignored = patterns_cfg.get("ignored_placeholders", [])
+        
+        # 1. Action Param check
+        if action_params:
+            candidate = str(action_params[0])
+            if candidate not in ignored:
+                return candidate
 
-        Returns:
-            Dict[str, List[Dict[str, Any]]]: A structured dictionary where keys 
-                are file paths and values are lists of issue dictionaries 
-                containing 'Line', 'Severity', 'Message', and 'Check'.
-        """
+        # 2. Regex-based extraction from Message/Description
+        search_pool = issue.get("Description", "") + " " + issue.get("Message", "")
+        # Zero Hardcoding: regex pattern must be provided in TOML
+        pattern = patterns_cfg.get("suggestion_extraction")
+        
+        if pattern and search_pool.strip():
+            match = re.search(pattern, search_pool)
+            if match:
+                return match.group(1)
+        
+        return ""
+
+    def run(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Executes Vale and processes findings into a generic format."""
         try:
-            # Resolve absolute path to ensure Vale identifies the file correctly
-            abs_target = self.target_path.resolve()
+            abs_target = str(self.target_path.resolve())
             
-            # Execute Vale with JSON output format for programmatic parsing
             result = subprocess.run(
-                ["vale", "--config", str(self.vale_ini), "--output=JSON", str(abs_target)],
+                ["vale", "--config", str(self.vale_ini.resolve()), "--output=JSON", abs_target],
                 capture_output=True,
                 text=True,
                 check=False
             )
             
-            if result.stderr:
-                console.print(f"[yellow]Vale Execution Warning:[/] {result.stderr}")
-                
-            return json.loads(result.stdout) if result.stdout else {}
+            if not result.stdout or result.stdout.strip() == "":
+                return {}
 
-        except FileNotFoundError:
-            console.print("[bold red]Critical Error:[/] Vale CLI is not installed or not in PATH.")
-            return {}
-        except json.JSONDecodeError:
-            console.print("[bold red]Analysis Error:[/] Could not interpret Vale JSON output.")
+            raw_data = json.loads(result.stdout)
+            processed_findings = {}
+
+            for file_path, file_issues in raw_data.items():
+                processed_findings[file_path] = []
+                for issue in file_issues:
+                    processed_findings[file_path].append({
+                        "Line": issue.get("Line"),
+                        "Check": issue.get("Check"),
+                        "Severity": issue.get("Severity"),
+                        "Message": issue.get("Message"),
+                        "Description": issue.get("Description", ""),
+                        "Suggestion": self._extract_suggestion(issue)
+                    })
+                
+            return processed_findings
+
+        except (FileNotFoundError, json.JSONDecodeError, subprocess.SubprocessError):
             return {}
 
     def display_report(self, data: Dict[str, List[Dict[str, Any]]]) -> None:
-        """Parses raw linting data and renders a formatted table in the terminal.
-
-        Args:
-            data (Dict[str, List[Dict[str, Any]]]): The JSON findings returned from 
-                the run() method, containing lists of style violations.
-        """
-        # Early exit if no issues are detected
+        """Renders the report with dynamic colors and themes from config."""
         if not data or not any(data.values()):
-            console.print("\n✨ [bold green]Quality Check Passed:[/] No style violations detected.")
+            console.print("\n✨ [bold green]Quality Check Passed[/]")
             return
+
+        linter_cfg = self.config.get("linter", {})
+        # Dynamic Color Mapping from TOML
+        theme = linter_cfg.get("theme", {
+            "error": "red", 
+            "warning": "yellow", 
+            "suggestion": "blue"
+        })
 
         table = Table(title="Style Guide Validation Report", title_style="bold cyan")
         table.add_column("Line", style="magenta", justify="right")
@@ -108,24 +145,18 @@ class StyleLinter:
         table.add_column("Message", style="white")
         table.add_column("Rule ID", style="yellow")
 
-        # Iterate through findings for the specific file
         for _, issues in data.items():
             for issue in issues:
-                severity = issue['Severity']
-                
-                # Assign semantic colors based on violation level
-                color = {
-                    "error": "red",
-                    "warning": "yellow",
-                    "suggestion": "blue"
-                }.get(severity, "white")
+                sev = issue['Severity']
+                color = theme.get(sev, "white")
                 
                 table.add_row(
                     str(issue['Line']),
-                    f"[{color}]{severity}[/]",
+                    f"[{color}]{sev}[/]",
                     issue['Message'],
                     issue['Check']
                 )
 
         console.print(table)
-        console.print(f"\n💡 [dim]Reference:[/] [link={self.guide_url}]Official SUSE Style Guide[/link]\n")
+        if self.guide_url:
+            console.print(f"\n💡 [dim]Reference:[/] [link={self.guide_url}]Style Guide[/link]\n")
