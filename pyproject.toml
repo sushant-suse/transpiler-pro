@@ -1,56 +1,60 @@
 [project]
 name = "transpiler-pro"
-version = "1.0.0"
-description = "Enterprise-grade deterministic Markdown to AsciiDoc transpiler with SUSE style validation."
-authors = [
-    { name = "Sushant Gaurav" }
-]
-readme = "README.md"
-requires-python = ">=3.11"
+version = "0.1.0"
+description = "Enterprise MD-to-ADOC conversion pipeline with SUSE style enforcement"
+authors = [{name = "Sushant Gaurav", email = "sushant-gaurav@suse.com"}]
 dependencies = [
-    "rich>=13.0.0",
     "typer>=0.12.0",
-    "pydantic>=2.0",
+    "rich>=13.0.0",
+    "spacy>=3.7.0",
+    "pytest>=8.0.0"
 ]
 
 [project.scripts]
-# This maps the 'transpile' command directly to our CLI entry point
-transpile = "transpiler_pro.cli:main"
+transpiler-pro = "transpiler_pro.cli:main"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.transpiler-pro.pipeline]
+supported_extensions = [".md", ".mdx"]
 
-[dependency-groups]
-dev = [
-    "pytest>=8.0",
-    "pytest-cov>=4.0",
-    "ruff>=0.3.0",
-    "pdoc>=14.0.0",
+[tool.transpiler-pro.linter]
+# Define exactly which Vale styles to use
+styles = ["Vale", "common", "asciidoc", "config"]
+min_alert_level = "suggestion"
+# Rich-console theme for the report
+theme = { error = "red", warning = "yellow", suggestion = "blue" }
+
+[tool.transpiler-pro.patterns]
+# Regex to pull suggestions out of Vale messages (e.g., 'Correct' instead of 'Wrong')
+suggestion_extraction = "'(.*?)'"
+instead_of_trigger = "instead of"
+removal_trigger = "removing"
+ignored_placeholders = ["spellings", "placeholder_text"]
+
+[tool.transpiler-pro.conversions]
+extension_map = { md = "adoc", mdx = "adoc" }
+
+# PHASE 1: SHIELDING (Markdown -> Marker)
+shielding_patterns = [
+    # Admonitions :::note
+    { regex = ":::(?P<type>\\w+)\\n(?P<body>.*?)\\n:::", replacement = "MARKER_ADMON_START_\\1\n\\2\nMARKER_ADMON_END" },
+    # HTML Details (Uses the 'protect_spaces' hook we added to converter.py)
+    { regex = "<details>\\s*<summary>(.*?)</summary>\\s*(.*?)\\s*</details>", replacement = "MARKER_COLL_START_\\1\n\\2\nMARKER_COLL_END", hook = "protect_spaces" }
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/transpiler_pro"]
-
-[tool.ruff]
-# Standardized to 110 to accommodate Rich console prints and regex
-line-length = 110
-target-version = "py313"
-src = ["src", "tests"]
-
-[tool.ruff.lint]
-# E: Error, F: Pyflakes, I: Isort (import sorting), D: Docstrings
-select = ["E", "F", "I", "D"]
-ignore = [
-    "D100", # Missing docstring in public module
-    "D104", # Missing docstring in public package
-    "D107", # Missing docstring in __init__ (covered by class docstrings)
-    "D205", # 1 blank line required between summary and description (optional, but helps speed)
-    "E501", # Ignore line length for regex and terminal messages
+# PHASE 2: RESTORATION (Marker -> AsciiDoc)
+restoration_patterns = [
+    # Restore Admonitions using a map
+    { regex = "MARKER_ADMON_START_{key}\\s*(.*?)\\s*MARKER_ADMON_END", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
+    # Restore Collapsibles (Uses the 'restore_spaces' hook we added to converter.py)
+    { regex = "MARKER_COLL_START_(.*?)\\n(.*?)\\nMARKER_COLL_END", replacement = ".\\1\n[%collapsible]\n======\n\\2\n======", hook = "restore_spaces" }
 ]
 
-[tool.ruff.lint.pydocstyle]
-convention = "google" # Enforce Google-style docstrings
+# PHASE 3: CLEANUP
+cleanup_regex = [
+    # Removes :toc: and other metadata lines
+    { regex = "^:.*?\\n", replacement = "", flags = "M" }
+]
 
-[tool.ruff.lint.isort]
-known-first-party = ["transpiler_pro"]
+[tool.transpiler-pro.antora]
+# Injected via the 'refine' command
+headers = [":experimental:", ":toc:", ":icons: font"]

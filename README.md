@@ -4,13 +4,13 @@ A high-fidelity documentation transpiler designed to convert **Markdown** into *
 
 ## 📌 Project Overview
 
-This project solves the "hallucination" and formatting breakage issues common in standard conversion tools (like Pandoc or kramdoc) when dealing with complex UI components like admonitions, collapsible blocks, and cross-references. It uses a **Three-Step Pipeline**:
+This project goes beyond standard conversion by using a **Smart Three-Phase Pipeline**. It combines deterministic regex-based transformation with **Natural Language Processing (NLP)** to identify and automatically repair style violations.
 
-1. **Pre-processing**: Shields complex Markdown components using unique text markers.
-2. **Transpilation**: Utilizes `kramdoc` for standard element conversion (tables, headers, bold/italic).
-3. **Post-processing**: Deterministically reconstructs protected components into perfect AsciiDoc syntax.
+1. **Phase 1 - Conversion** - Shields complex Markdown components and utilizes `kramdoc` for structural transpilation.
+2. **Phase 2 - Validation** - Integrates the **Vale CLI** with official SUSE styles to detect linguistic errors.
+3. **Phase 3 - Auto-Heal** - Uses **spaCy NLP** to contextually repair grammar (for example, tense agreement) and surgically fix spelling without hardcoded dictionaries.
 
-Refer to the [System Architecture document](System-Architecture.md) for an in-depth breakdown of the code structure, module interactions, and data flow.
+Refer to the [System Architecture document]() for an in-depth breakdown of the module interactions and data flow.
 
 ## 📂 Folder Structure
 
@@ -18,71 +18,80 @@ Refer to the [System Architecture document](System-Architecture.md) for an in-de
 .
 ├── src/transpiler_pro/
 │   ├── core/
-│   │   ├── converter.py    # Main engine: Pre/Post-processing & kramdoc wrapper
-│   │   ├── linter.py       # Vale integration for SUSE style checking
-│   │   ├── navigator.py    # (Planned) Directory traversal logic
-│   │   └── fixer.py        # (Next Phase) Deterministic style repair
+│   │   ├── converter.py    # Phase 1: Markdown to AsciiDoc transformation
+│   │   ├── linter.py       # Phase 2: Style sensing via Vale
+│   │   ├── fixer.py        # Phase 2.5: NLP-driven linguistic repair
+│   │   └── refiner.py      # Phase 3: JS-to-Antora Navigation generation
 │   ├── utils/
-│   │   └── paths.py        # Path management utilities
-│   └── cli.py              # Typer-based Command Line Interface
-├── styles/suse-styles/     # Official SUSE Vale rulesets and dictionaries
+│   │   └── paths.py        # Project-wide path management
+│   └── cli.py              # Typer-based orchestration layer
+├── styles/                 # Official SUSE Vale rulesets and dictionaries
 ├── data/
 │   ├── inputs/             # Source .md files
-│   └── outputs/            # Transpiled .adoc files
-└── tests/                  # Pytest suite for structural integrity
+│   └── outputs/            # Transpiled and "healed" .adoc files
+└── tests/                  # Pytest suite (100% logic coverage)
+
 ```
 
-## ✨ Features Implemented (Phase 1)
+## ✨ Features Implemented
 
-### 1. Advanced Component Mapping
+### 1. NLP-Driven Grammar Repair
+
+Unlike basic find-and-replace tools, Transpiler-Pro uses **Dependency Parsing** to ensure grammatical correctness:
+
+- **Contextual Tense Fix**: Replaces "will" (forbidden in SUSE docs). It intelligently chooses "is" or "are" based on whether the subject is singular (e.g., *The system is*) or plural (for example, *We are*).
+
+### 2. Zero-Hardcoded Spelling Fixes
+
+The tool is "Suggestion-Aware." It extracts the recommended correction directly from Vale's rule parameters. If you add a new spelling rule to the SUSE styles, the fixer automatically knows how to repair it without any Python code changes.
+
+### 3. Advanced Component Mapping
 
 | Markdown | AsciiDoc (Antora) | Implementation Detail |
 | --- | --- | --- |
 | `:::info` / `:::tip` | `[IMPORTANT]` / `[TIP]` | Converts to full block delimiters (`====`) |
-| `> **Note**:` | `[NOTE]` | Promotes blockquotes to formal Admonition blocks |
 | `<details><summary>` | `[%collapsible]` | Preserves summary text as the block title |
-| `[Title](./file.md)` | `xref:file.adoc[Title]` | Normalizes paths and strips leading `./` |
-| `***bold-italic***` | `*_bold-italic_*` | Fixes complex nested formatting |
+| `[Title](./file.md)` | `xref:file.adoc[Title]` | Normalizes paths for Antora compliance |
 
-### 2. Structural Fixes
-
-* **Header Protection**: Prevents syntax collisions by converting headers inside Admonitions into bold text.
-* **List Normalization**: Fixes nesting depth in mixed lists (for example, numbered items inside bullets).
-* **Path Sanitization**: Automatically strips redundant `./` from cross-references for Antora compliance.
-* **Whitespace Management**: Collapses triple-newlines and ensures tight attribute-to-block alignment.
-
-## 🛠 Installation & Usage
+## 🛠 Installation & Setup
 
 ### Prerequisites
 
-* [Python 3.13+](https://www.python.org/)
-* [uv](https://github.com/astral-sh/uv) (Package manager)
-* [kramdoc](https://github.com/asciidoctor/kramdown-asciidoc) (`gem install kramdown-asciidoc`)
-* [Vale](https://vale.sh/) (Style linter)
+- **Python 3.12** (Pinned for spaCy/NumPy binary compatibility)
+- **uv** (Modern Python package manager)
+- **kramdoc** (`gem install kramdown-asciidoc`)
+- **Vale** (`brew install vale`)
 
-### Setup
+### Clone & Environment Setup
 
 ```bash
-# Install dependencies
+# 1. Clone the repository
+git clone https://github.com/your-username/transpiler-pro.git
+cd transpiler-pro
+
+# 2. Create virtual environment and install dependencies
+# This will use the pinned Python 3.12 and lock all versions
 uv sync
+
+# 3. Download the NLP Grammar Model
+# Note: This is required for the 'Auto-Heal' engine to function
+uv run python -m spacy download en_core_web_sm
 ```
 
-### Running the Transpiler
+## 🚀 Usage
 
-To convert a single file and run the SUSE style linter:
+### Running the Full Pipeline
+
+To convert a file, validate it, and **automatically apply repairs**:
 
 ```bash
-uv run transpile run --file <filepath>
-# Example
-uv run transpile run --file data/inputs/test.md
+uv run transpile run --file data/inputs/test.md --fix
 ```
 
-Output will be saved as `data/outputs/` with a terminal report of any style violations.
+### Running Tests
 
-## 🔍 Validation Workflow
+Ensure the NLP and conversion logic are functioning correctly in your local environment:
 
-The tool currently implements a **Convert-then-Lint** strategy:
-
-1. **Conversion**: Generates the `.adoc` file in `data/outputs/`.
-2. **Linting**: Automatically triggers **Vale** using the rules in `styles/suse-styles/`.
-3. **Reporting**: Prints a color-coded report to the terminal identifying style violations (for example, `wifi` vs `Wi-Fi`, or use of future tense `will`).
+```bash
+uv run pytest
+```

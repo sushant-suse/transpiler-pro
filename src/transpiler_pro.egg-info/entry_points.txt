@@ -1,0 +1,2 @@
+[console_scripts]
+transpiler-pro = transpiler_pro.cli:main
