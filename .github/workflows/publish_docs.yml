@@ -27,5 +27,5 @@ jobs:
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: docs # Change this to 'docs' to match your docs.py output
+          folder: docs
           branch: gh-pages
