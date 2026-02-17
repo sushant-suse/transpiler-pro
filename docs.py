@@ -35,6 +35,9 @@ def build_portal():
     """Main orchestration for generating the documentation portal."""
     project_root = Path(__file__).parent
     docs_out = project_root / "docs"
+    
+    if docs_out.exists():
+        shutil.rmtree(docs_out)
     docs_out.mkdir(exist_ok=True)
 
     console.print("[bold magenta]🚀 Building Unified Documentation Portal[/]\n")
