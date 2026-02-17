@@ -4,13 +4,11 @@ A high-fidelity documentation transpiler designed to convert **Markdown** into *
 
 ## 📌 Project Overview
 
-This project goes beyond standard conversion by using a **Smart Three-Phase Pipeline**. It combines deterministic regex-based transformation with **Natural Language Processing (NLP)** to identify and automatically repair style violations.
+Transpiler-Pro is an enterprise-grade utility that goes beyond standard conversion. It uses a **Smart Multi-Phase Pipeline** to transform, validate and contextually repair technical documentation.
 
-1. **Phase 1 - Conversion** - Shields complex Markdown components and utilizes `kramdoc` for structural transpilation.
-2. **Phase 2 - Validation** - Integrates the **Vale CLI** with official SUSE styles to detect linguistic errors.
-3. **Phase 3 - Auto-Heal** - Uses **spaCy NLP** to contextually repair grammar (for example, tense agreement) and surgically fix spelling without hardcoded dictionaries.
-
-Refer to the [System Architecture document]() for an in-depth breakdown of the module interactions and data flow.
+1. **Phase 1: Transformation** – Shields Markdown components (admonitions/collapsibles) and utilizes `kramdoc` for structural transpilation.
+2. **Phase 2: Validation** – Integrates the **Vale CLI** with a comprehensive suite of official SUSE styles to detect linguistic and technical errors.
+3. **Phase 3: Auto-Heal & Learning** – Uses **spaCy NLP** for grammatical repair and a dynamic **Knowledge Base** to enforce branding and "learn" new terminology on the fly.
 
 ## 📂 Folder Structure
 
@@ -18,80 +16,81 @@ Refer to the [System Architecture document]() for an in-depth breakdown of the m
 .
 ├── src/transpiler_pro/
 │   ├── core/
-│   │   ├── converter.py    # Phase 1: Markdown to AsciiDoc transformation
-│   │   ├── linter.py       # Phase 2: Style sensing via Vale
-│   │   ├── fixer.py        # Phase 2.5: NLP-driven linguistic repair
-│   │   └── refiner.py      # Phase 3: JS-to-Antora Navigation generation
-│   ├── utils/
-│   │   └── paths.py        # Project-wide path management
-│   └── cli.py              # Typer-based orchestration layer
-├── styles/                 # Official SUSE Vale rulesets and dictionaries
+│   │   ├── converter.py    # Structural transformation & block restoration
+│   │   ├── linter.py       # Style sensing via Vale CLI
+│   │   └── fixer.py        # NLP-driven repair & Knowledge Base management
+│   ├── utils/              # Project-wide path management
+│   └── cli.py              # Typer-based orchestration & Antora refinement
+├── styles/suse-styles/     # Official SUSE Vale rulesets (common, asciidoc, etc.)
 ├── data/
 │   ├── inputs/             # Source .md files
-│   └── outputs/            # Transpiled and "healed" .adoc files
-└── tests/                  # Pytest suite (100% logic coverage)
-
+│   ├── outputs/            # Transpiled and "healed" .adoc files
+│   └── knowledge_base.json # The "Brain": Persistent branding & learned terms
+├── docs/                   # Auto-generated project documentation (HTML)
+├── tests/                  # Pytest suite with 100% logic coverage
+└── pyproject.toml          # Central configuration & NLP special verbs
 ```
 
-## ✨ Features Implemented
+## ✨ Key Features
 
 ### 1. NLP-Driven Grammar Repair
 
 Unlike basic find-and-replace tools, Transpiler-Pro uses **Dependency Parsing** to ensure grammatical correctness:
 
-- **Contextual Tense Fix**: Replaces "will" (forbidden in SUSE docs). It intelligently chooses "is" or "are" based on whether the subject is singular (e.g., *The system is*) or plural (for example, *We are*).
+* **Intelligent Tense Shift**: Automatically converts future-tense "will" into the progressive present. It identifies subjects to choose between "is" and "are" (for example, *The system is* vs *Users are*).
+* **CVC Verb Doubling**: Corrects verb endings dynamically (for example, *run* -> *running*), with data driven overrides in `pyproject.toml` (for example, *setup* -> *setting up*).
 
-### 2. Zero-Hardcoded Spelling Fixes
+### 2. Self-Learning Knowledge Base
 
-The tool is "Suggestion-Aware." It extracts the recommended correction directly from Vale's rule parameters. If you add a new spelling rule to the SUSE styles, the fixer automatically knows how to repair it without any Python code changes.
+The tool features a **Discovery Engine**. If the linter flags a spelling error not present in the Knowledge Base:
 
-### 3. Advanced Component Mapping
+* It applies a capitalization fallback.
+* It **logs the new word** to `data/knowledge_base.json` for future sessions.
+* **Global Enforcement**: It forces branding (like `SUSE`, `Wi-Fi`, `ID`) even if the linter fails to flag the word.
 
-| Markdown | AsciiDoc (Antora) | Implementation Detail |
-| --- | --- | --- |
-| `:::info` / `:::tip` | `[IMPORTANT]` / `[TIP]` | Converts to full block delimiters (`====`) |
-| `<details><summary>` | `[%collapsible]` | Preserves summary text as the block title |
-| `[Title](./file.md)` | `xref:file.adoc[Title]` | Normalizes paths for Antora compliance |
+### 3. Structural Block Restoration
+
+High-fidelity mapping of complex Markdown components to AsciiDoc:
+
+* **Admonitions**: Converts `:::info` blocks to full `[IMPORTANT]` AsciiDoc blocks with delimiters.
+* **Collapsibles**: Maps `<details>` to Antora `[%collapsible]` blocks.
+* **XREFs**: Normalizes Markdown links into Antora-compliant `xref:file.adoc[]` format.
 
 ## 🛠 Installation & Setup
 
 ### Prerequisites
 
-- **Python 3.12** (Pinned for spaCy/NumPy binary compatibility)
-- **uv** (Modern Python package manager)
-- **kramdoc** (`gem install kramdown-asciidoc`)
-- **Vale** (`brew install vale`)
+* **Python 3.12+**
+* **uv** (Python package manager)
+* **kramdoc** (`gem install kramdown-asciidoc`)
+* **Vale** (`brew install vale`)
 
-### Clone & Environment Setup
+### Setup
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-username/transpiler-pro.git
-cd transpiler-pro
-
-# 2. Create virtual environment and install dependencies
-# This will use the pinned Python 3.12 and lock all versions
+# 1. Sync dependencies
 uv sync
 
-# 3. Download the NLP Grammar Model
-# Note: This is required for the 'Auto-Heal' engine to function
+# 2. Download the NLP Grammar Model
 uv run python -m spacy download en_core_web_sm
 ```
 
 ## 🚀 Usage
 
-### Running the Full Pipeline
-
-To convert a file, validate it, and **automatically apply repairs**:
+### Transpilation & Repair
 
 ```bash
-uv run transpile run --file data/inputs/test.md --fix
+# Convert, Validate, and Auto-Fix a specific file
+uv run transpiler-pro run --file data/inputs/sample.md --fix
+
+# Run on all files in the input directory
+uv run transpiler-pro run --all --fix
 ```
 
-### Running Tests
-
-Ensure the NLP and conversion logic are functioning correctly in your local environment:
+### Testing
 
 ```bash
+# Run the full logic test suite
 uv run pytest
 ```
+

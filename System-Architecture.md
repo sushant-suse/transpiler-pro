@@ -1,35 +1,51 @@
-## 🏗 System Architecture & Module Interaction
+# 🏗 System Architecture & Module Interaction
 
-The project follows a modular, "Smart Pipeline" architecture. It utilizes Natural Language Processing (NLP) and deterministic linting to not only convert documentation but proactively "heal" it.
+Transpiler-Pro is built on a **Decoupled Logic Architecture**. The Python source code remains "pure"—it contains the algorithms for transformation but contains no hardcoded strings, branding or specific grammar rules. Instead, it consumes data from the **SUSE Style Guide** and a **Persistent Knowledge Base**.
 
-### 🛰 Orchestration Layer
+## 🛰 Orchestration Layer
 
-- **`cli.py`**: The central brain. It uses **Typer** to orchestrate the three-phase pipeline (Conversion -> Validation -> Repair).
+* **`cli.py`**: The central conductor. It manages the lifecycle of a transpilation job using **Typer**. It handles recursive file discovery, ensures the output directory mirrors the input structure, and executes the final **Antora Refinement** (header injection and path normalization).
 
-### ⚙️ Core Transformation & Repair Layer
+## ⚙️ Core Transformation & Repair Layer
 
-- **`core/converter.py`**: Handles structural conversion (Markdown to AsciiDoc). It ensures deterministic mapping of headers, code blocks, and lists.
-- **`core/linter.py`**: The "Sensor"; it integrates the **Vale CLI** to identify style violations. It captures suggested replacements from Vale's rule parameters, enabling a zero-hardcoded fix strategy.
-- **`core/fixer.py`**: The "Healer"; it uses **spaCy NLP** for context-aware grammar repairs (for example, subject-verb agreement for future tense) and surgically applies spelling corrections provided by the linter.
-- **`core/refiner.py`**: The "Navigation Architect"; it parses JavaScript sidebar configurations (common in MDX projects) and transforms them into hierarchical, Antora-compliant nav.adoc files. It bridges the gap between dynamic JS navigation and static AsciiDoc cross-references.
+### 1. `core/converter.py` (The Structural Engineer)
 
-### 🛠 Support Layer
+Handles the "Shield-Transpile-Restore" workflow:
 
-- **`utils/paths.py`**: The project's "Internal GPS." It provides absolute path resolution for all modules.
+* **Shielding**: Protects complex Markdown elements (Admonitions, Collapsibles, XREFs) using regex-defined markers from `pyproject.toml`.
+* **Structural Conversion**: Executes `kramdoc` for standard Markdown-to-AsciiDoc conversion.
+* **Restoration**: Replaces markers with high-fidelity, Antora-compliant AsciiDoc blocks.
 
-## 🔄 Data Flow Pipeline
+### 2. `core/linter.py` (The Style Sensor)
 
-1. **Initialization**: User executes `uv run transpile run --fix`.
-2. **Phase 1 (Conversion)**: `converter.py` transforms files from `data/inputs/` to `data/outputs/`.
-3. **Phase 2 (Validation)**: `linter.py` runs Vale against output files, extracting both errors and their suggested "Gold" replacements.
-4. **Phase 3 (Auto-Heal)**: `fixer.py` analyzes the findings. It uses dependency parsing to ensure grammatical correctness (e.g., "We are" vs "The system is") and overwrites violations with suggested fixes.
+Integrates the **Vale CLI** as a diagnostic engine. It maps the official SUSE style library against the generated AsciiDoc. It does not just find errors; it extracts **Correction Metadata** (suggestions, rule IDs, and triggers) to fuel the Fixer.
 
-### Project Layout (Standard `src` Layout)
+### 3. `core/fixer.py` (The NLP Healer & Learner)
 
-| Directory/File | Responsibility |
-| --- | --- |
-| `src/transpiler_pro/` | Main Python package source code. |
-| `data/` | Persistent storage for inputs, outputs, and local assets. |
-| `styles/` | SUSE Style Guide YAML rules used by Vale. |
-| `tests/` | Pytest suite (includes NLP context validation). |
-| `pyproject.toml` | Environment manifest (Pins Python 3.12 and spaCy dependencies). |
+The most sophisticated layer, utilizing **spaCy NLP** and a **Dynamic Knowledge Base**:
+
+* **Grammar Repair**: Uses Dependency Parsing to fix tenses. It identifies the "Head" verb and its "Subjects" to choose correct progressive forms (for example, *The nodes are* vs. *The node is*).
+* **Learning Engine**: If a spelling error is found that is not in the knowledge base, it logs the discovery to `data/knowledge_base.json`.
+* **Global Enforcement**: A safety-net pass that ensures branding (SUSE, Wi-Fi) is corrected even if the linter fails to flag it.
+
+## 🔄 The Smart-Pipeline Data Flow
+
+1. **Ingestion**: Markdown is pulled from `data/inputs/`.
+2. **Conversion (Phase 1)**: Structural transformation occurs; complex blocks are converted to Antora-standard syntax.
+3. **Validation (Phase 2)**: The Linter generates a "Violation Map" of style and branding errors.
+4. **Auto-Heal (Phase 2.5)**: The Fixer performs three sub-passes:
+* **Contextual Grammar**: Tense correction via NLP.
+* **Surgical Removal**: Deletion of editorial "fluff" (very, simple, note that).
+* **Branding Pass**: Force-caps and casing from the Knowledge Base.
+
+
+5. **Final Refinement (Phase 3)**: Antora headers (`:experimental:`, `:toc:`, etc.) are injected, and the Knowledge Base is saved.
+
+## 📁 Data Driven Layout
+
+| Component | Responsibility | Source of Truth |
+| --- | --- | --- |
+| **Fixer Logic** | How to fix a sentence. | `fixer.py` |
+| **Branding Data** | Which words to fix. | `data/knowledge_base.json` |
+| **Grammar Rules** | Irregular verb conjugations. | `pyproject.toml` |
+| **Style Rules** | SUSE technical standards. | `styles/suse-styles/` |

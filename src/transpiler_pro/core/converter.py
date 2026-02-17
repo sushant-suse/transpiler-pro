@@ -1,6 +1,6 @@
 """Location: src/transpiler_pro/core/converter.py
-Description: Data-driven DocConverter. No hardcoded HTML tags or markers.
-All transformations are defined via regex patterns in the project configuration.
+Description: Data-driven DocConverter. Optimized restoration logic to prevent
+marker artifacts and text swallowing.
 """
 
 import re
@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Match, Optional, Dict, Any
 
 class DocConverter:
-    """A generic transformation engine that converts documents based on injected patterns."""
+    """A generic transformation engine driven by configuration patterns."""
 
     def __init__(self, config_path: Optional[Path] = None):
         self.config_path = config_path or Path("pyproject.toml")
@@ -27,21 +27,15 @@ class DocConverter:
             return {}
 
     def pre_process_markdown(self, content: str) -> str:
-        """
-        Shields specific Markdown flavors (admonitions, HTML details) 
-        using patterns defined entirely in configuration.
-        """
+        """Shields blocks using patterns defined entirely in configuration."""
         patterns = self.conv_cfg.get("shielding_patterns", [])
         
         for p in patterns:
             regex = p.get("regex")
             replacement = p.get("replacement")
             
-            # Support for complex replacements via specialized logic if a 'hook' is defined
             if p.get("hook") == "protect_spaces":
                 def protect_hook(match: Match) -> str:
-                    # Generic logic: protect spaces in the first group, leave rest alone
-                    # Used primarily for HTML <summary> titles
                     title = match.group(1).strip().replace(' ', 'PROTECT_SPACE')
                     body = match.group(2).strip()
                     return replacement.replace(r"\1", title).replace(r"\2", body)
@@ -52,16 +46,14 @@ class DocConverter:
         return content
 
     def post_process_asciidoc(self, content: str) -> str:
-        """
-        Cleans artifacts and restores shielded blocks using dynamic mapping.
-        """
-        # 1. Generic Cleanup (e.g., removing :toc:, metadata, or kramdoc artifacts)
+        """Restores markers and cleans artifacts based on strict TOML rules."""
+        # 1. Generic Cleanup
         cleanup = self.conv_cfg.get("cleanup_regex", [])
         for c in cleanup:
             flags = re.M if c.get("flags") == "M" else 0
             content = re.sub(c["regex"], c["replacement"], content, flags=flags)
 
-        # 2. Dynamic Marker Restoration (Admonitions, Collapsibles, etc.)
+        # 2. Dynamic Marker Restoration (Improved regex handling)
         restorations = self.conv_cfg.get("restoration_patterns", [])
         for r in restorations:
             regex = r.get("regex")
@@ -74,29 +66,31 @@ class DocConverter:
                     return replacement.replace(r"\1", title).replace(r"\2", body)
                 content = re.sub(regex, restore_hook, content, flags=re.S)
             else:
-                # Map-based restoration (e.g., matching Admonition types)
-                # This allows one regex to handle multiple types (Note, Tip, Warning)
                 mapping = r.get("map")
                 if mapping:
                     for key, val in mapping.items():
-                        # Replace placeholder with specific map value
+                        # We use \s* inside the regex to be forgiving of kramdoc's spacing
                         current_regex = regex.replace("{key}", key)
                         current_replace = replacement.replace("{val}", val)
                         content = re.sub(current_regex, current_replace, content, flags=re.S)
                 else:
                     content = re.sub(regex, replacement, content, flags=re.S)
 
-        # 3. Dynamic XREFs (File extension mapping)
+        # 3. Dynamic XREFs (Zero-Hardcoded)
         ext_map = self.conv_cfg.get("extension_map", {})
         if ext_map:
+            normalization = self.conv_cfg.get("path_normalization", [])
+            
             def clean_xref(match: Match) -> str:
                 path, ext = match.group(1), match.group(2)
-                path = re.sub(r'^\.\/', '', path) # Standard path normalization
+                for rule in normalization:
+                    path = re.sub(rule["regex"], rule["replacement"], path)
+                
                 new_ext = ext_map.get(ext, ext)
                 return f'xref:{path}.{new_ext}'
             
-            # The pattern itself can be moved to config if needed, but the logic is now dynamic
-            content = re.sub(r'link:((?!http)[^ ]*)\.(md|json|yaml|yml)', clean_xref, content)
+            xref_pattern = self.conv_cfg.get("xref_detection_regex", r'link:((?!http)[^ ]*)\.(md|json|yaml|yml)')
+            content = re.sub(xref_pattern, clean_xref, content)
 
         return content.strip()
 
@@ -108,7 +102,6 @@ class DocConverter:
         temp_md.write_text(ready_md)
         
         try:
-            # External tool execution (kramdoc is the only 'hardcoded' dependency)
             subprocess.run(
                 ["kramdoc", "--wrap", "ventilate", "-o", str(output_path), str(temp_md)], 
                 check=True, capture_output=True

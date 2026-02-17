@@ -1,0 +1,10 @@
+{
+    "branding": {
+        "suse": "SUSE",
+        "wifi": "Wi-Fi",
+        "ip": "IP",
+        "id": "ID",
+        "config": "configuration"
+    },
+    "learned": {}
+}

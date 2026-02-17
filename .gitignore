@@ -28,4 +28,5 @@ data/outputs/*
 .DS_Store
 
 # Personal Tracking files
-project_structure.txt
+Project-Structure.txt
+Personal-Tracker.md

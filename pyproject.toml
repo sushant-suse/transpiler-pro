@@ -1,7 +1,7 @@
 [project]
 name = "transpiler-pro"
-version = "0.1.0"
-description = "Enterprise MD-to-ADOC conversion pipeline with SUSE style enforcement"
+version = "1.0.0"
+description = "Enterprise MD-to-ADOC conversion pipeline with SUSE learning engine"
 authors = [{name = "Sushant Gaurav", email = "sushant-gaurav@suse.com"}]
 dependencies = [
     "typer>=0.12.0",
@@ -15,46 +15,44 @@ transpiler-pro = "transpiler_pro.cli:main"
 
 [tool.transpiler-pro.pipeline]
 supported_extensions = [".md", ".mdx"]
+# The "Brain" of the operation: external JSON for massive branding/fallbacks
+knowledge_base = "data/knowledge_base.json"
+
+[tool.transpiler-pro.grammar]
+special_verbs = { "setup" = "setting up", "stop" = "stopping", "check" = "checking", "reboot" = "rebooting", "backup" = "backing up", "fix" = "fixing", "finish" = "finishing" }
 
 [tool.transpiler-pro.linter]
-# Define exactly which Vale styles to use
 styles = ["Vale", "common", "asciidoc", "config"]
 min_alert_level = "suggestion"
-# Rich-console theme for the report
+supported_formats = ["adoc", "md"]
+report_title = "SUSE Style Guide Validation Report"
 theme = { error = "red", warning = "yellow", suggestion = "blue" }
 
 [tool.transpiler-pro.patterns]
-# Regex to pull suggestions out of Vale messages (e.g., 'Correct' instead of 'Wrong')
-suggestion_extraction = "'(.*?)'"
+suggestion_extraction = "['\"‘“’\u2018\u2019\u201c\u201d](.*?)['\"’\u2018\u2019\u201c\u201d]"
 instead_of_trigger = "instead of"
 removal_trigger = "removing"
-ignored_placeholders = ["spellings", "placeholder_text"]
 
 [tool.transpiler-pro.conversions]
 extension_map = { md = "adoc", mdx = "adoc" }
+path_normalization = [{ regex = "^\\./", replacement = "" }]
 
 # PHASE 1: SHIELDING (Markdown -> Marker)
 shielding_patterns = [
-    # Admonitions :::note
     { regex = ":::(?P<type>\\w+)\\n(?P<body>.*?)\\n:::", replacement = "MARKER_ADMON_START_\\1\n\\2\nMARKER_ADMON_END" },
-    # HTML Details (Uses the 'protect_spaces' hook we added to converter.py)
     { regex = "<details>\\s*<summary>(.*?)</summary>\\s*(.*?)\\s*</details>", replacement = "MARKER_COLL_START_\\1\n\\2\nMARKER_COLL_END", hook = "protect_spaces" }
 ]
 
 # PHASE 2: RESTORATION (Marker -> AsciiDoc)
 restoration_patterns = [
-    # Restore Admonitions using a map
-    { regex = "MARKER_ADMON_START_{key}\\s*(.*?)\\s*MARKER_ADMON_END", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
-    # Restore Collapsibles (Uses the 'restore_spaces' hook we added to converter.py)
-    { regex = "MARKER_COLL_START_(.*?)\\n(.*?)\\nMARKER_COLL_END", replacement = ".\\1\n[%collapsible]\n======\n\\2\n======", hook = "restore_spaces" }
+    { regex = "(?s)MARKER_ADMON_START_{key}\\s+(.*?)\\s+MARKER_ADMON_END", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
+    { regex = "(?s)MARKER_COLL_START_(.*?)\\n(.*?)\\nMARKER_COLL_END", replacement = ".\\1\n[%collapsible]\n======\n\\2\n======", hook = "restore_spaces" }
 ]
 
 # PHASE 3: CLEANUP
 cleanup_regex = [
-    # Removes :toc: and other metadata lines
     { regex = "^:.*?\\n", replacement = "", flags = "M" }
 ]
 
 [tool.transpiler-pro.antora]
-# Injected via the 'refine' command
 headers = [":experimental:", ":toc:", ":icons: font"]
