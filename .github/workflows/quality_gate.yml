@@ -13,6 +13,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
+          # This tells Git to actually use the .gitmodules file we just fixed
           submodules: recursive
           fetch-depth: 0
 
@@ -22,9 +23,9 @@ jobs:
           enable-cache: true
 
       - name: Install Dependencies
+        # 'uv sync' automatically creates the .venv and installs everything
         run: |
           uv sync --group dev
-          # Explicitly download the NLP model required for fixer tests
           uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
       - name: Security Audit
@@ -32,7 +33,7 @@ jobs:
           uv run pip-audit
 
       - name: Run Tests with Coverage
-        # We use 'uv run' to ensure the environment is correctly activated
+        # Using 'uv run' ensures we use the .venv created by 'uv sync'
         run: |
           uv run pytest --cov=src --cov-report=term-missing > coverage_report.txt
 
