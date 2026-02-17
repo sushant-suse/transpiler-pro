@@ -1,31 +1,30 @@
-# Python bytecode
+# --- Python & Environment ---
 __pycache__/
 *.py[cod]
-
-# Environments
+*$py.class
 .venv/
 venv/
-ENV/
-
-# Testing
+.python-version
+.ruff_cache/
 .pytest_cache/
-.coverage
-htmlcov/
 
-# Documentation
-docs/
-public/
-
-# Project Specific
-.vale.ini
-*.tmp.md
-
-# Data Boundaries
+# --- Project Specific Data ---
+# We ignore all outputs but keep the folder structure via .gitkeep
 data/outputs/*
 !data/outputs/.gitkeep
 
-# Mac OS specific
+# --- Tracking the Brain ---
+# We explicitly do NOT ignore knowledge_base.json so it can be version controlled
+# data/knowledge_base.json is NOT in this list, meaning git will track it.
+
+# --- Clean up Showcase Clutter ---
 .DS_Store
+
+# --- Tool Specific ---
+.vale.ini
+.coverage
+htmlcov/
+*.egg-info/
 
 # Personal Tracking files
 Project-Structure.txt

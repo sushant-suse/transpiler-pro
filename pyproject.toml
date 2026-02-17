@@ -2,6 +2,7 @@
 name = "transpiler-pro"
 version = "1.0.0"
 description = "Enterprise MD-to-ADOC conversion pipeline with SUSE learning engine"
+requires-python = "==3.12.*"
 authors = [{name = "Sushant Gaurav", email = "sushant-gaurav@suse.com"}]
 dependencies = [
     "typer>=0.12.0",

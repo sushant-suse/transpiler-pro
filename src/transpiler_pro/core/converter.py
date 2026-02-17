@@ -7,7 +7,7 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
-from typing import Match, Optional, Dict, Any
+from typing import Match, Optional
 
 class DocConverter:
     """A generic transformation engine driven by configuration patterns."""

@@ -25,22 +25,24 @@ class StyleFixer:
 
         try:
             self.nlp = spacy.load("en_core_web_sm")
-        except:
+        except Exception: # Catches standard errors, allows SystemExit/KeyboardInterrupt
             self.nlp = None
 
     def _load_config(self) -> dict:
-        if not self.config_path.exists(): return {}
+        if not self.config_path.exists(): 
+            return {}
         try:
             with open(self.config_path, "rb") as f:
                 return tomllib.load(f).get("tool", {}).get("transpiler-pro", {})
-        except: return {}
+        except (tomllib.TOMLDecodeError, OSError): # Specific to file/parsing issues
+            return {}
 
     def _load_kb(self) -> dict:
         """Loads the external JSON brain."""
         if self.kb_path.exists():
             try:
                 return json.loads(self.kb_path.read_text())
-            except:
+            except (json.JSONDecodeError, OSError): # Specific to JSON/disk issues
                 pass
         return {"branding": {}, "learned": {}}
 
@@ -64,7 +66,8 @@ class StyleFixer:
         return lemma + "ing"
 
     def _fix_tense(self, line: str) -> str:
-        if not self.nlp: return line
+        if not self.nlp: 
+            return line
         doc = self.nlp(line)
         working_line = line
         for token in doc:
@@ -79,12 +82,14 @@ class StyleFixer:
         return working_line
 
     def fix_file(self, file_path: Path, violations: List[Dict[str, Any]]) -> int:
-        if not file_path.exists(): return 0
+        if not file_path.exists(): 
+            return 0
         content = file_path.read_text(encoding="utf-8").splitlines()
         total_fixes = 0
         
         line_map = defaultdict(list)
-        for v in violations: line_map[v["Line"]].append(v)
+        for v in violations: 
+            line_map[v["Line"]].append(v)
 
         patterns = self.config.get("patterns", {})
         extract_re = patterns.get("suggestion_extraction", r"'(.*?)'")
@@ -95,7 +100,8 @@ class StyleFixer:
 
         for line_num in sorted(line_map.keys(), reverse=True):
             idx = line_num - 1
-            if idx >= len(content): continue
+            if idx >= len(content): 
+                continue
             
             working_line = content[idx]
             original_line = working_line
