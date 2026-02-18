@@ -27,10 +27,14 @@ jobs:
           # 2. Ensure the NLP model is present
           uv run python -m spacy download en_core_web_sm
           
-          # 3. Execute the custom build engine (now includes build timestamps)
+          # 3. Execute the custom build engine
           uv run python docs.py 
 
-          # Verify coverage_report exists before deployment
+          # 4. FORCE Git to track the coverage report on the runner
+          # This overrides any lingering .gitignore issues during deployment
+          git add -f docs/coverage_report/
+          
+          # Verify assets
           echo "Checking built assets in docs/ folder:"
           ls -F docs/
           echo "Checking coverage_report content:"
@@ -44,4 +48,4 @@ jobs:
           clean: true
           single-commit: true
           force: true
-          commit-message: "Deploying Portal: ${{ github.sha }} [Build Timestamped]"
+          commit-message: "Deploying Portal: ${{ github.sha }} [Forced Assets]"
