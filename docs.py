@@ -76,7 +76,16 @@ def build_portal():
     # 4. Portal Generation
     create_home_page(project_root, docs_out)
     create_adoc_viewer(docs_out)
-    (docs_out / ".nojekyll").touch()
+    
+    # Create and log the Jekyll bypass file to prevent 404s
+    nojekyll_file = docs_out / ".nojekyll"
+    nojekyll_file.touch()
+    console.print(f"  [bold green]✓[/] Jekyll bypass (.nojekyll) created at {nojekyll_file}")
+
+    # Verification log for the CI runner
+    coverage_index = docs_out / "coverage_report" / "index.html"
+    if coverage_index.exists():
+        console.print(f"  [bold green]✓[/] Coverage report verified at {coverage_index}")
 
     console.print("\n[bold green]✨ Portal Ready! Open docs/index.html to view everything.[/]")
 

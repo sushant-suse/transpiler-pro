@@ -21,14 +21,13 @@ jobs:
 
       - name: Build Unified Portal
         run: |
-          # 1. Install dependencies (including dev tools like pytest, pdoc, coverage)
+          # 1. Install dependencies
           uv sync --group dev
           
-          # 2. Ensure the NLP model is present for the StyleFixer logic
+          # 2. Ensure the NLP model is present
           uv run python -m spacy download en_core_web_sm
           
           # 3. Execute the custom build engine
-          # This generates the portal, test docs, coverage, and .nojekyll
           uv run python docs.py 
 
           # Verify coverage_report exists before deployment
@@ -43,5 +42,5 @@ jobs:
           folder: docs       # Deploy contents of local /docs folder
           branch: gh-pages   # To the gh-pages branch
           clean: true        # Automatically remove old files not in the current build
-          single-commit: true
-      
+          single-commit: true # Replaces branch history with the latest build
+          force: true        # FORCES the update even if git detects no changes
