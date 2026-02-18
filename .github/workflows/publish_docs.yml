@@ -30,6 +30,12 @@ jobs:
           # 3. Execute the custom build engine
           # This generates the portal, test docs, coverage, and .nojekyll
           uv run python docs.py 
+
+          # Verify coverage_report exists before deployment
+          echo "Checking built assets in docs/ folder:"
+          ls -F docs/
+          echo "Checking coverage_report content:"
+          ls -F docs/coverage_report/index.html || echo "ERROR: Coverage index not found!"
           
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
@@ -37,3 +43,5 @@ jobs:
           folder: docs       # Deploy contents of local /docs folder
           branch: gh-pages   # To the gh-pages branch
           clean: true        # Automatically remove old files not in the current build
+          single-commit: true
+      

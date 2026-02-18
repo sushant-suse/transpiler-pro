@@ -9,12 +9,10 @@ venv/
 .pytest_cache/
 
 # --- Project Specific Data ---
-# We ignore all outputs but keep the folder structure via .gitkeep
 data/outputs/*
 !data/outputs/.gitkeep
 
 # --- Tracking the Brain ---
-# We explicitly do NOT ignore knowledge_base.json so it can be version controlled
 # data/knowledge_base.json is NOT in this list, meaning git will track it.
 
 # --- Clean up Showcase Clutter ---
@@ -26,9 +24,11 @@ data/outputs/*
 htmlcov/
 *.egg-info/
 
-# Explicitly allow the documentation version of coverage
-!docs/coverage_report/
-
 # Personal Tracking files
 Project-Structure.txt
 Personal-Tracker.md
+
+# --- Documentation Portal Persistence ---
+# We must explicitly allow these so the CI runner doesn't skip them
+!docs/coverage_report/
+!docs/.nojekyll
