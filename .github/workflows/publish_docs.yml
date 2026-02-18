@@ -13,11 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'recursive' # Pulls SUSE styles for the Linter/Fixer
+          submodules: 'recursive'
 
       - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true # Speeds up subsequent builds
+          enable-cache: true
 
       - name: Build Unified Portal
         run: |
@@ -27,7 +27,7 @@ jobs:
           # 2. Ensure the NLP model is present
           uv run python -m spacy download en_core_web_sm
           
-          # 3. Execute the custom build engine
+          # 3. Execute the custom build engine (now includes build timestamps)
           uv run python docs.py 
 
           # Verify coverage_report exists before deployment
@@ -39,8 +39,9 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: docs       # Deploy contents of local /docs folder
-          branch: gh-pages   # To the gh-pages branch
-          clean: true        # Automatically remove old files not in the current build
-          single-commit: true # Replaces branch history with the latest build
-          force: true        # FORCES the update even if git detects no changes
+          folder: docs
+          branch: gh-pages
+          clean: true
+          single-commit: true
+          force: true
+          commit-message: "Deploying Portal: ${{ github.sha }} [Build Timestamped]"
