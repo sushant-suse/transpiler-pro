@@ -22,12 +22,12 @@ data/outputs/*
 
 # --- Tool Specific ---
 .vale.ini
-# .coverage
+.coverage
 htmlcov/
 *.egg-info/
 
 # Explicitly allow the documentation version of coverage
-# !docs/coverage_report/
+!docs/coverage_report/
 
 # Personal Tracking files
 Project-Structure.txt
