@@ -30,15 +30,17 @@ jobs:
           # 3. Execute the custom build engine
           uv run python docs.py 
 
-          # 4. FORCE Git to track the coverage report on the runner
-          # This overrides any lingering .gitignore issues during deployment
-          git add -f docs/coverage_report/
+          # 4. FORCE: Remove any hidden .gitignore files inside the docs folder 
+          # that might be sabotaging the rsync/deployment step.
+          find docs -name ".gitignore" -delete
           
-          # Verify assets
-          echo "Checking built assets in docs/ folder:"
-          ls -F docs/
-          echo "Checking coverage_report content:"
-          ls -F docs/coverage_report/index.html || echo "ERROR: Coverage index not found!"
+          # 5. Explicitly ensure the directory is seen as "not empty"
+          mkdir -p docs/coverage_report
+          touch docs/coverage_report/.gitkeep
+          
+          # Verify assets for the log
+          echo "Final check of docs structure:"
+          ls -R docs/coverage_report
           
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
@@ -48,4 +50,4 @@ jobs:
           clean: true
           single-commit: true
           force: true
-          commit-message: "Deploying Portal: ${{ github.sha }} [Forced Assets]"
+          commit-message: "Deploy Portal: ${{ github.sha }} [Forced Sync]"
