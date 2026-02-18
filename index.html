@@ -1,0 +1,169 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Transpiler-Pro Project Portal</title>
+        <style>
+            body { font-family: -apple-system, sans-serif; display: flex; margin: 0; background: #f6f8fa; }
+            nav { width: 280px; background: #24292e; color: white; height: 100vh; padding: 25px 20px; position: fixed; box-sizing: border-box; }
+            nav h2 { color: #42b983; border-bottom: 2px solid #42b983; padding-bottom: 10px; margin-top: 0; }
+            nav a { color: #c8d1d9; display: block; padding: 12px 0; text-decoration: none; border-bottom: 1px solid #30363d; font-size: 0.95rem; }
+            nav a:hover { color: #42b983; }
+            main { margin-left: 280px; padding: 40px; background: white; min-height: 100vh; width: calc(100% - 280px); box-sizing: border-box; }
+            .markdown-body { max-width: 900px; margin: 0 auto; line-height: 1.6; color: #24292e; }
+            pre { background: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #ddd; overflow: auto; }
+        </style>
+    </head>
+    <body>
+        <nav>
+            <h2>🚀 Navigation</h2>
+            <a href="index.html">🏠 Home (README)</a>
+            <a href="transpiler_pro.html">📦 API Reference</a>
+            <a href="tests.html">🧪 Test Documentation</a>
+            <a href="coverage_report/index.html">📊 Coverage Report</a>
+            <a href="view-architecture.html">🏗️ System Architecture</a>
+        </nav>
+        <main>
+            <article class="markdown-body">
+                <h1>🚀 Personal Transpiler-Pro</h1>
+
+<p><a href="https://github.com/sushant-suse/transpiler-pro"><img src="https://img.shields.io/badge/tests-19%20passed-brightgreen" alt="Build Status" /></a>
+<a href="https://github.com/sushant-suse/transpiler-pro"><img src="https://img.shields.io/badge/coverage-78%25-blueviolet" alt="Coverage" /></a>
+<a href="https://sushant-suse.github.io/transpiler-pro/"><img src="https://img.shields.io/badge/docs-pdoc-blue" alt="Documentation" /></a></p>
+
+<p>A high-fidelity documentation transpiler designed to convert <strong>Markdown</strong> into <strong>Antora-compliant AsciiDoc</strong>, specifically tailored for SUSE technical documentation standards.</p>
+
+<h2>📌 Project Overview</h2>
+
+<p>Transpiler-Pro is an enterprise-grade utility that goes beyond standard conversion. It uses a <strong>Smart Multi-Phase Pipeline</strong> to transform, validate, and contextually repair technical documentation.</p>
+
+<ol>
+<li><strong>Phase 1 - Transformation</strong> – Shields Markdown components (admonitions/collapsibles) and utilizes <code>kramdoc</code> for structural transpilation.</li>
+<li><strong>Phase 2 - Validation</strong> – Integrates the <strong>Vale CLI</strong> with a comprehensive suite of official SUSE styles to detect linguistic and technical errors.</li>
+<li><strong>Phase 3 - Auto-Heal &amp; Learning</strong> – Uses <strong>spaCy NLP</strong> for grammatical repair and a dynamic <strong>Knowledge Base</strong> to enforce branding and "learn" new terminology on the fly.</li>
+</ol>
+
+<h2>📂 Folder Structure</h2>
+
+<div class="codehilite">
+<pre><span></span><code>.
+├── src/transpiler_pro/
+│   ├── core/
+│   │   ├── converter.py    # Structural transformation &amp; block restoration
+│   │   ├── linter.py       # Style sensing via Vale CLI
+│   │   └── fixer.py        # NLP-driven repair &amp; Knowledge Base management
+│   ├── utils/              # Project-wide path management
+│   └── cli.py              # Typer-based orchestration &amp; Antora refinement
+├── styles/suse-styles/     # Official SUSE Vale rulesets (submodule)
+├── data/
+│   ├── inputs/             # Source .md files
+│   ├── outputs/            # Transpiled and &quot;healed&quot; .adoc files
+│   └── knowledge_base.json # The &quot;Brain&quot;: Persistent branding &amp; learned terms
+├── docs/                   # Auto-generated project documentation (pdoc)
+├── tests/                  # Pytest suite verifying core logic
+└── pyproject.toml          # Central configuration &amp; NLP special verbs
+</code></pre>
+</div>
+
+<h2>✨ Key Features</h2>
+
+<h3>1. NLP-Driven Grammar Repair</h3>
+
+<p>Unlike basic find-and-replace tools, Transpiler-Pro uses <strong>Dependency Parsing</strong> to ensure grammatical correctness:</p>
+
+<ul>
+<li><strong>Intelligent Tense Shift</strong> - Automatically converts future-tense "will" into the progressive present. It identifies subjects to choose between "is" and "are" (for example, <em>The system is</em> vs <em>Users are</em>).</li>
+<li><strong>CVC Verb Doubling</strong> - Corrects verb endings dynamically (for example, <em>run</em> -> <em>running</em>), with data driven overrides in <code>pyproject.toml</code> (for example, <em>setup</em> -> <em>setting up</em>).</li>
+</ul>
+
+<h3>2. Self-Learning Knowledge Base</h3>
+
+<p>The tool features a <strong>Discovery Engine</strong>. If the linter flags a spelling error not present in the Knowledge Base:</p>
+
+<ul>
+<li>It applies a capitalization fallback.</li>
+<li>It <strong>logs the new word</strong> to <code>data/knowledge_base.json</code> for future sessions.</li>
+<li><strong>Global Enforcement</strong> - It forces branding (like <code>SUSE</code>, <code>Wi-Fi</code>, <code>ID</code>) even if the linter fails to flag the word.</li>
+</ul>
+
+<h3>3. Structural Block Restoration</h3>
+
+<p>High-fidelity mapping of complex Markdown components to AsciiDoc:</p>
+
+<ul>
+<li><strong>Admonitions</strong> - Converts <code>:::info</code> blocks to full <code>[IMPORTANT]</code> AsciiDoc blocks.</li>
+<li><strong>Collapsibles</strong> - Maps <code>&lt;details&gt;</code> to Antora <code>[%collapsible]</code> blocks.</li>
+<li><strong>XREFs</strong> - Normalizes Markdown links into Antora-compliant <code>xref:file.adoc[]</code> format.</li>
+</ul>
+
+<h2>🛠 Installation &amp; Setup</h2>
+
+<h3>Prerequisites</h3>
+
+<ul>
+<li><strong>Python 3.12+</strong></li>
+<li><strong>uv</strong> (Python package manager)</li>
+<li><strong>kramdoc</strong> (<code>gem install kramdown-asciidoc</code>)</li>
+<li><strong>Vale</strong> (<code>brew install vale</code>)</li>
+</ul>
+
+<h3>Setup</h3>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># 1. Sync dependencies</span>
+uv<span class="w"> </span>sync
+
+<span class="c1"># 2. Download the NLP Grammar Model</span>
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>spacy<span class="w"> </span>download<span class="w"> </span>en_core_web_sm
+
+<span class="c1"># 3. Sync Style Submodules</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>run<span class="w"> </span>--sync
+</code></pre>
+</div>
+
+<h2>🚀 Usage</h2>
+
+<h3>Transpilation &amp; Repair</h3>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Convert, Validate, and Auto-Fix a specific file</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>sample.md<span class="w"> </span>--fix
+
+<span class="c1"># Run on all files in the input directory</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>run<span class="w"> </span>--fix
+</code></pre>
+</div>
+
+<h3>Documentation &amp; Testing</h3>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Generate the documentation suite (API Reference + Self-Transpiled Arch)</span>
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>docs.py
+
+<span class="c1"># Run the full logic test suite</span>
+uv<span class="w"> </span>run<span class="w"> </span>pytest
+</code></pre>
+</div>
+
+<h4>To view the generated documentation:</h4>
+
+<p>Open <code>docs/index.html</code> in your browser.</p>
+
+<p>Or, navigate to the docs directory and serve it with Python's HTTP server:</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="nb">cd</span><span class="w"> </span>docs
+python<span class="w"> </span>-m<span class="w"> </span>http.server<span class="w"> </span><span class="m">8000</span>
+</code></pre>
+</div>
+
+<p>Then open <code>http://localhost:8000</code> in your browser.</p>
+
+                <hr>
+                <p style="font-size: 0.8rem; color: #888;">Portal Last Updated: 2026-02-18 12:08:30</p>
+            </article>
+        </main>
+    </body>
+    </html>
+    
