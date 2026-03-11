@@ -1,12 +1,29 @@
 {
-    "branding": {
+    "automated_fixes": {
         "suse": "SUSE",
         "wifi": "Wi-Fi",
         "ip": "IP",
-        "id": "ID",
-        "config": "configuration"
+        "config": "configuration",
+        "imagen": "image",
+        "communiti": "community",
+        "blockquote": "block quote",
+        "setup": "set up"
     },
+    "tense_rules": {
+        "will be": "is",
+        "will check": "checks",
+        "will verify": "verifies",
+        "will fix": "fixes"
+    },
+    "ignored_rules": [
+        "asciidoc.NoWidthForFigures",
+        "common.Colons"
+    ],
     "learned": {
+        "suse": "spellings",
+        "wifi": "spellings",
+        "ip": "spellings",
+        "config": "spellings",
         "imagen": "spellings",
         "blockquote": "spellings",
         "communiti": "spellings"

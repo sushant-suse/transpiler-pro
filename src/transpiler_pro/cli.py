@@ -1,10 +1,6 @@
 """
 Location: src/transpiler_pro/cli.py
-
 Description: Orchestration Layer for Transpiler-Pro.
-Coordinates:
-1. X-Command: Markdown to Raw AsciiDoc (Intermediate).
-2. Y-Command: Style Validation and Auto-Repair (Final Output).
 """
 
 import tomllib
@@ -19,6 +15,8 @@ from rich.console import Console
 from transpiler_pro.core.converter import DocConverter
 from transpiler_pro.core.fixer import StyleFixer
 from transpiler_pro.core.linter import StyleLinter
+from transpiler_pro.core.repair import LinguisticEngine
+from transpiler_pro.utils.logger import AuditLogger
 from transpiler_pro.utils.paths import INPUT_DIR, INTERMEDIATE_DIR, OUTPUT_DIR
 
 app = typer.Typer(
@@ -37,6 +35,7 @@ def load_config(config_path: Path) -> Dict[str, Any]:
         return {}
     try:
         with open(config_path, "rb") as f:
+            # Navigate to [tool.transpiler-pro]
             return tomllib.load(f).get("tool", {}).get("transpiler-pro", {})
     except Exception:
         return {}
@@ -74,7 +73,6 @@ def convert_x(
     for md_path in target_files:
         if not md_path.exists(): 
             continue
-        # Output goes to INTERMEDIATE_DIR
         inter_path = INTERMEDIATE_DIR / md_path.with_suffix(".adoc").name
         console.print(f"[bold blue]X-Phase:[/] Converting [cyan]{md_path.name}[/] -> [yellow]{inter_path.name}[/]")
         converter.convert_file(md_path, inter_path)
@@ -86,9 +84,17 @@ def repair_y(
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
     """
-    COMMAND Y: Validates and repairs AsciiDoc files from the intermediate directory.
+    COMMAND Y: Validates and repairs AsciiDoc files using NLP and Style Guide rules.
     """
     config_path = Path(config)
+    pipeline_config = load_config(config_path)
+    
+    # 🔍 FIX: Explicitly isolate the branding fixes. 
+    # This prevents the 'learned' category from turning your text into the word 'spellings'.
+    automated_fixes = pipeline_config.get("automated_fixes", {})
+    repair_engine = LinguisticEngine(knowledge_base={"automated_fixes": automated_fixes})
+    
+    audit_logger = AuditLogger()
     fixer = StyleFixer(config_path=config_path)
 
     if file_name:
@@ -100,24 +106,48 @@ def repair_y(
         if not inter_path.exists(): 
             continue
         
-        # Move to final OUTPUT_DIR for processing
         final_path = OUTPUT_DIR / inter_path.name
         shutil.copy(inter_path, final_path)
         
         console.print(f"\n[bold blue]Y-Phase:[/] Validating [cyan]{final_path.name}[/]")
+        
+        # 1. INITIAL LINT
         linter = StyleLinter(final_path, config_path=config_path)
         linter.setup_config()
-        findings = linter.run()
-        linter.display_report(findings)
+        initial_findings = linter.run()
+        linter.display_report(initial_findings)
 
-        if fix and findings:
+        if fix and initial_findings:
+            # 2. LINGUISTIC REPAIR (NLP Tenses + Brand mappings)
+            content = final_path.read_text(encoding="utf-8")
+            healed_content = repair_engine.repair_text(content)
+            final_path.write_text(healed_content, encoding="utf-8")
+
+            # 3. RULE-BASED REPAIR (Regex patterns from fixer engine)
             file_key = str(final_path.resolve())
-            file_violations = findings.get(file_key, [])
+            file_violations = initial_findings.get(file_key, [])
             if file_violations:
-                repaired_count = fixer.fix_file(final_path, file_violations)
-                console.print(f"  [bold green]✨ Repaired {repaired_count} violations in {final_path.name}.[/]")
-                # Final check
-                linter.display_report(linter.run())
+                fixer.fix_file(final_path, file_violations)
+
+            # 4. FINAL AUDIT & LOGGING
+            console.print(f"  [bold green]✨ Processing complete for {final_path.name}.[/]")
+            final_findings = linter.run()
+            linter.display_report(final_findings)
+            
+            # Map residual issues to the Audit Report
+            residual_violations = final_findings.get(file_key, [])
+            for v in residual_violations:
+                audit_logger.log_issue(
+                    file_path=str(final_path),
+                    # Use .get() to handle varying Vale JSON field casing
+                    line=v.get("Line") or v.get("line") or 1,
+                    severity=v.get("Severity") or v.get("severity") or "warning",
+                    message=v.get("Message") or v.get("message") or "Review style",
+                    rule_id=v.get("Check") or v.get("check") or "Style.General"
+                )
+            
+            if residual_violations:
+                console.print(f"  [bold yellow]📋 {len(residual_violations)} items logged to audit report.[/]")
 
 @app.command(name="run")
 def execute_full_pipeline(
@@ -126,21 +156,11 @@ def execute_full_pipeline(
     sync: bool = typer.Option(False, "--sync"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
-    """
-    FULL PIPELINE: Executes both Command X and Command Y sequentially.
-    """
+    """FULL PIPELINE: Executes both Command X and Command Y sequentially."""
     if sync:
         sync_styles()
-    
-    # Run X
     convert_x(file_name=file_name, config=config)
-    # Run Y
     repair_y(file_name=file_name, fix=fix, config=config)
-
-@app.command(name="version")
-def version():
-    """Display the version of Transpiler-Pro."""
-    console.print("Transpiler-Pro v1.0.0")
 
 def main():
     app()

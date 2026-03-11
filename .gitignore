@@ -10,6 +10,7 @@ venv/
 
 # --- Project Specific Data ---
 data/outputs/*
+data/logs/old/*
 !data/outputs/.gitkeep
 
 # --- Tracking the Brain ---
