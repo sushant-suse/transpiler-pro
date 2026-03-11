@@ -55,12 +55,35 @@ class StyleLinter:
     def setup_config(self) -> None:
         """
         Generates a `.vale.ini` file using dynamic styles and levels from TOML.
-        Forces Asciidoctor support to ensure non-spelling rules are active.
+        Injects technical terms into a dynamic vocabulary to stop spelling false positives.
         """
         linter_cfg = self.config.get("linter", {})
         styles_root = str(STYLES_DIR.resolve()).replace("\\", "/")
         
-        # Default to a basic set of styles if not defined, ensuring Vale has something to work with.
+        # 1. Handle Dynamic Vocabulary (Technical Terms)
+        # We load technical terms from the Knowledge Base to tell Vale they are "Accepted"
+        kb_setting = self.config.get("pipeline", {}).get("knowledge_base", "data/knowledge_base.json")
+        kb_path = Path(kb_setting)
+        vocab_setting = ""
+        
+        if kb_path.exists():
+            try:
+                kb_data = json.loads(kb_path.read_text(encoding="utf-8"))
+                tech_terms = kb_data.get("technical_terms", [])
+                
+                if tech_terms:
+                    # Create the Vale Vocabulary directory structure
+                    vocab_dir = STYLES_DIR / "vocabularies" / "Project"
+                    vocab_dir.mkdir(parents=True, exist_ok=True)
+                    accept_file = vocab_dir / "accept.txt"
+                    
+                    # Write terms to Vale's accepted list
+                    accept_file.write_text("\n".join(tech_terms), encoding="utf-8")
+                    vocab_setting = "Vocab = Project"
+            except Exception as e:
+                console.print(f"[yellow]⚠️ Warning:[/] Could not inject technical terms: {e}")
+
+        # 2. Build the .vale.ini content
         styles = linter_cfg.get("styles", ["Vale", "common", "asciidoc"])
         styles_str = ", ".join(styles)
         min_level = linter_cfg.get("min_alert_level", "suggestion")
@@ -68,6 +91,7 @@ class StyleLinter:
         config_raw = f"""
         StylesPath = {styles_root}
         MinAlertLevel = {min_level}
+        {vocab_setting}
 
         [*.{{adoc,md}}]
         BasedOnStyles = {styles_str}
@@ -167,4 +191,3 @@ class StyleLinter:
                 )
 
         console.print(table)
-        
