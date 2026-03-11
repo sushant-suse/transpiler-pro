@@ -11,7 +11,7 @@ import tomllib
 import subprocess
 import shutil
 from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional
 
 import typer
 from rich.console import Console
@@ -50,8 +50,8 @@ def sync_styles() -> None:
             check=True, capture_output=True, text=True
         )
         console.print("  [bold green]✓[/] Style guide is synchronized.")
-    except Exception as e:
-        console.print(f"  [bold yellow]⚠️ Warning:[/] Sync failed. Using local cached styles.")
+    except Exception:
+        console.print("  [bold yellow]⚠️ Warning:[/] Sync failed. Using local cached styles.")
 
 @app.command(name="x-convert")
 def convert_x(
@@ -72,7 +72,8 @@ def convert_x(
         target_files = [p for p in INPUT_DIR.iterdir() if p.suffix in exts]
 
     for md_path in target_files:
-        if not md_path.exists(): continue
+        if not md_path.exists(): 
+            continue
         # Output goes to INTERMEDIATE_DIR
         inter_path = INTERMEDIATE_DIR / md_path.with_suffix(".adoc").name
         console.print(f"[bold blue]X-Phase:[/] Converting [cyan]{md_path.name}[/] -> [yellow]{inter_path.name}[/]")
@@ -96,7 +97,8 @@ def repair_y(
         target_files = list(INTERMEDIATE_DIR.glob("*.adoc"))
 
     for inter_path in target_files:
-        if not inter_path.exists(): continue
+        if not inter_path.exists(): 
+            continue
         
         # Move to final OUTPUT_DIR for processing
         final_path = OUTPUT_DIR / inter_path.name

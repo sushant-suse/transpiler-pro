@@ -92,7 +92,6 @@ class DocConverter:
         Returns:
             Finalized AsciiDoc with native syntax restored.
         """
-        from datetime import datetime
 
         # 1. Generic Cleanup (e.g., removing frontmatter artifacts)
         cleanup = self.conv_cfg.get("cleanup_regex", [])
