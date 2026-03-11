@@ -18,9 +18,12 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent.parent
 # 2. Data Directory Definitions
 # INPUT_DIR: Where source Markdown/MDX files reside.
 # OUTPUT_DIR: Where finalized AsciiDoc files are generated.
+# INTERMEDIATE_DIR: Holds raw ADOC before linguistic repair.
+
 DATA_DIR: Path = BASE_DIR / "data"
 INPUT_DIR: Path = DATA_DIR / "inputs"
 OUTPUT_DIR: Path = DATA_DIR / "outputs"
+INTERMEDIATE_DIR: Path = DATA_DIR / "intermediate"
 
 # 3. External Assets and Styles
 # STYLES_DIR: Points to the localized SUSE style definitions and Vale rulesets.
@@ -37,6 +40,7 @@ def initialize_directories() -> None:
     """
     required_dirs: List[Path] = [
         INPUT_DIR,
+        INTERMEDIATE_DIR,
         OUTPUT_DIR,
         STYLES_DIR.parent
     ]

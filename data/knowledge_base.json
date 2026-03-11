@@ -6,5 +6,9 @@
         "id": "ID",
         "config": "configuration"
     },
-    "learned": {}
+    "learned": {
+        "imagen": "spellings",
+        "blockquote": "spellings",
+        "communiti": "spellings"
+    }
 }

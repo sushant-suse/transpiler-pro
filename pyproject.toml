@@ -19,7 +19,6 @@ dependencies = [
     "pytest>=8.0.0"
 ]
 
-# Metadata for pdoc and package registries
 [project.urls]
 Homepage = "https://github.com/your-username/transpiler-pro"
 Documentation = "https://your-username.github.io/transpiler-pro/"
@@ -36,18 +35,16 @@ dev = [
     "pytest-cov>=5.0.0",
     "pip-audit>=2.7.0",
     "ruff>=0.3.0",
-    "pdoc>=14.0.0", # Added for your documentation generation
+    "pdoc>=14.0.0",
 ]
 
 [tool.uv]
 package = true
 
-# Standardize Pytest execution
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=src --cov-report=term-missing"
 
-# Standardize Ruff (Linter) behavior
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -77,20 +74,37 @@ path_normalization = [{ regex = "^\\./", replacement = "" }]
 
 # PHASE 1: SHIELDING
 shielding_patterns = [
-    { regex = ":::(?P<type>\\w+)\\n(?P<body>.*?)\\n:::", replacement = "MARKER_ADMON_START_\\1\n\\2\nMARKER_ADMON_END" },
-    { regex = "<details>\\s*<summary>(.*?)</summary>\\s*(.*?)\\s*</details>", replacement = "MARKER_COLL_START_\\1\n\\2\nMARKER_COLL_END", hook = "protect_spaces" }
+    { regex = ":::(?P<type>\\w+)\\n(?P<body>.*?)\\n:::", replacement = "SHIELDADMONSTART\\1\n\\2\nSHIELDADMONEND" },
+    { regex = "<details>\\s*<summary>(.*?)</summary>\\s*(.*?)\\s*</details>", replacement = "SHIELDCOLLSTART\\1SHIELDSEP\\2SHIELDCOLLEND", hook = "protect_spaces" }
 ]
 
 # PHASE 2: RESTORATION
 restoration_patterns = [
-    { regex = "(?s)MARKER_ADMON_START_{key}\\s+(.*?)\\s+MARKER_ADMON_END", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
-    { regex = "(?s)MARKER_COLL_START_(.*?)\\n(.*?)\\nMARKER_COLL_END", replacement = ".\\1\n[%collapsible]\n======\n\\2\n======", hook = "restore_spaces" }
+    { regex = "(?s)SHIELDADMONSTART{key}\\s*(.*?)\\s*SHIELDADMONEND", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
+    # Simplified regex to allow the Python hook to handle internal SHIELDSEP logic
+    { regex = "(?s)SHIELDCOLLSTART(.*?)\\s*SHIELDCOLLEND", replacement = ".\\1\n[%collapsible]\n======\n\\2\n======", hook = "restore_spaces" }
 ]
 
 # PHASE 3: CLEANUP
 cleanup_regex = [
-    { regex = "^:.*?\\n", replacement = "", flags = "M" }
+    # Converts blockquotes into Admonition blocks; routes to 'uppercase_label' hook in Python
+    { regex = "(?m)^____\\n\\*(Note|Tip|Warning|Important|Caution)[:]?\\*[:]?\\s*(.*?)\\n____", replacement = "[\\1]\n====\n\\2\n====", hook = "uppercase_label", flags = "M" },
+    
+    # Force newlines for squashed numbered list items (Fixes spacing issues)
+    { regex = "([^\\n])\\s+\\.\\s+", replacement = "\\1\\n. ", flags = "M" },
+    
+    # Remove Pandoc list metadata and image captions
+    { regex = "\\[arabic\\]\\n", replacement = "" },
+    { regex = "^\\..*?\\nimage::", replacement = "image::", flags = "M" },
+    
+    # Strip Link noise and character escaping introduced by Pandoc
+    { regex = "\\+\\+\\[\\+\\+", replacement = "[" },
+    { regex = "\\+\\+\\]\\+\\+", replacement = "]" },
+    
+    # Handle marker cleanup for spaces and newlines
+    { regex = "PROTECTSPACE", replacement = " " },
+    { regex = "SHIELDSEP", replacement = "\n" }
 ]
 
 [tool.transpiler-pro.antora]
-headers = [":experimental:", ":toc:", ":icons: font"]
+headers = []
