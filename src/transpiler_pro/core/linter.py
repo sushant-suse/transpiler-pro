@@ -1,10 +1,8 @@
 """
 Location: src/transpiler_pro/core/linter.py
 
-Description: Style Validation Engine for Transpiler-Pro.
-
-This module provides the `StyleLinter` class, which orchestrates linguistic 
-checks using the Vale CLI. It dynamically generates configuration on-the-fly 
+Description: Style Validation Engine for Transpiler-Pro. This module provides the `StyleLinter` class, 
+which orchestrates linguistic checks using the Vale CLI. It dynamically generates configuration on-the-fly 
 based on settings defined in `pyproject.toml`.
 """
 
@@ -26,7 +24,7 @@ console = Console()
 class StyleLinter:
     """
     Orchestrates style validation using externalized configurations and Vale.
-    
+
     Attributes:
         target_path (Path): The file to be linted.
         config_path (Path): Path to the project configuration.
@@ -57,15 +55,14 @@ class StyleLinter:
     def setup_config(self) -> None:
         """
         Generates a `.vale.ini` file using dynamic styles and levels from TOML.
-        
-        This allows the linter to adapt to different style guides (like SUSE) 
-        without hardcoded paths.
+        Forces Asciidoctor support to ensure non-spelling rules are active.
         """
         linter_cfg = self.config.get("linter", {})
         styles_root = str(STYLES_DIR.resolve()).replace("\\", "/")
         
-        styles = linter_cfg.get("styles", [])
-        styles_str = ", ".join(styles) if styles else "Vale"
+        # Default to a basic set of styles if not defined, ensuring Vale has something to work with.
+        styles = linter_cfg.get("styles", ["Vale", "common", "asciidoc"])
+        styles_str = ", ".join(styles)
         min_level = linter_cfg.get("min_alert_level", "suggestion")
 
         config_raw = f"""
@@ -74,6 +71,8 @@ class StyleLinter:
 
         [*.{{adoc,md}}]
         BasedOnStyles = {styles_str}
+        
+        asciidoctor = true
         """
         
         self.vale_ini.write_text(textwrap.dedent(config_raw).strip())
@@ -84,13 +83,15 @@ class StyleLinter:
         patterns_cfg = self.config.get("patterns", {})
         ignored = patterns_cfg.get("ignored_placeholders", [])
         
+        # Check Vale's internal action parameters
         if action_params:
             candidate = str(action_params[0])
             if candidate not in ignored:
                 return candidate
 
+        # Regex extraction from the message (for example, extracting 'very' or 'note that')
         search_pool = issue.get("Description", "") + " " + issue.get("Message", "")
-        pattern = patterns_cfg.get("suggestion_extraction")
+        pattern = patterns_cfg.get("suggestion_extraction", r"['\"‘“’](.*?)['\"’]")
         
         if pattern and search_pool.strip():
             match = re.search(pattern, search_pool)
@@ -100,8 +101,7 @@ class StyleLinter:
         return ""
 
     def run(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Executes the Vale CLI and processes findings into a standardized format.
+        """Executes the Vale CLI and processes findings into metadata for the Fixer.
         
         Returns:
             A dictionary where keys are file paths and values are lists of issues.
@@ -146,11 +146,7 @@ class StyleLinter:
             return
 
         linter_cfg = self.config.get("linter", {})
-        theme = linter_cfg.get("theme", {
-            "error": "red", 
-            "warning": "yellow", 
-            "suggestion": "blue"
-        })
+        theme = linter_cfg.get("theme", {"error": "red", "warning": "yellow", "suggestion": "blue"})
 
         table = Table(title="Style Guide Validation Report", title_style="bold cyan")
         table.add_column("Line", style="magenta", justify="right")
@@ -161,7 +157,7 @@ class StyleLinter:
         for _, issues in data.items():
             for issue in issues:
                 sev = issue['Severity']
-                color = theme.get(sev, "white")
+                color = theme.get(sev.lower(), "white")
                 
                 table.add_row(
                     str(issue['Line']),
@@ -171,5 +167,4 @@ class StyleLinter:
                 )
 
         console.print(table)
-        if self.guide_url:
-            console.print(f"\n💡 [dim]Reference:[/] [link={self.guide_url}]Style Guide[/link]\n")
+        

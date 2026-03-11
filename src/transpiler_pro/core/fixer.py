@@ -6,7 +6,7 @@ Description: Linguistic Repair Engine for Transpiler-Pro.
 This module provides the `StyleFixer` class, the 'Auto-Heal' brain of the pipeline.
 It utilizes:
 
-1. **NLP (spaCy)**: For context-aware tense shifting (e.g., 'will' to progressive).
+1. **NLP (spaCy)**: For context-aware tense shifting (for example, 'will' to progressive).
 2. **Knowledge Base**: An external JSON store for branding and learned terminology.
 3. **Global Enforcement**: A safety-pass to ensure consistency across all documentation.
 """
@@ -140,6 +140,7 @@ class StyleFixer:
         patterns = self.config.get("patterns", {})
         extract_re = patterns.get("suggestion_extraction", r"'(.*?)'")
         remove_trigger = patterns.get("removal_trigger", "removing")
+        instead_of_trigger = patterns.get("instead_of_trigger", "instead of")
 
         # Combine branding and learned words for high-priority matching
         session_branding = {**self.kb.get("learned", {}), **self.kb.get("branding", {})}
@@ -156,37 +157,45 @@ class StyleFixer:
             for issue in line_map[line_num]:
                 msg = issue.get("Message", "")
                 check_id = issue.get("Check", "")
+                suggestion = issue.get("Suggestion", "")
 
                 # 1. Branding Sync
                 for wrong, correct in session_branding.items():
                     if f"'{wrong}'" in msg.lower() or f"‘{wrong}’" in msg.lower():
                         working_line = re.sub(rf"\b{re.escape(wrong)}\b", correct, working_line, flags=re.IGNORECASE)
 
-                # 2. Surgical Removal
-                if remove_trigger in msg.lower():
-                    targets = re.findall(extract_re, msg)
-                    if targets:
-                        working_line = re.sub(rf"\b{re.escape(targets[0])}\b\s?", "", working_line, flags=re.IGNORECASE)
+                # 2. Surgical Removal (for example, Wordiness, Editorializing)
+                if remove_trigger in msg.lower() or "Editorializing" in check_id:
+                    target = suggestion if suggestion else (re.findall(extract_re, msg)[0] if re.findall(extract_re, msg) else None)
+                    if target:
+                        # Ensures we remove the word and any trailing extra space
+                        working_line = re.sub(rf"\b{re.escape(target)}\b\s?", "", working_line, flags=re.IGNORECASE)
 
                 # 3. Phrasal Substitution
-                elif "instead of" in msg.lower():
-                    terms = re.findall(extract_re, msg)
-                    if len(terms) >= 2:
-                        working_line = re.sub(rf"\b{re.escape(terms[1])}\b", terms[0], working_line, flags=re.IGNORECASE)
+                elif instead_of_trigger in msg.lower():
+                    # If we have a suggestion, it's usually what we WANT
+                    if suggestion:
+                        # Extract the 'wrong' term from the message
+                        m = re.findall(extract_re, msg)
+                        wrong_term = m[1] if len(m) >= 2 else (m[0] if m else "")
+                        if wrong_term:
+                            working_line = re.sub(rf"\b{re.escape(wrong_term)}\b", suggestion, working_line, flags=re.IGNORECASE)
 
                 # 4. Spelling + Learning Discovery
                 elif "Spelling" in check_id:
-                    targets = re.findall(extract_re, msg)
-                    if targets:
-                        word = targets[0]
-                        if word.lower() not in session_branding:
-                            capitalized = word.capitalize()
-                            working_line = re.sub(rf"\b{re.escape(word)}\b", capitalized, working_line, flags=re.IGNORECASE)
-                            if word.lower() not in self.kb["branding"]:
-                                self.kb["learned"][word.lower()] = capitalized
+                    # Prefer the suggested word if Vale provided one
+                    word_to_fix = re.findall(extract_re, msg)[0] if re.findall(extract_re, msg) else ""
+                    if word_to_fix:
+                        correct_word = suggestion if suggestion else word_to_fix.capitalize()
+                        
+                        working_line = re.sub(rf"\b{re.escape(word_to_fix)}\b", correct_word, working_line, flags=re.IGNORECASE)
+                        
+                        # Learn the correction if it's new
+                        if word_to_fix.lower() not in session_branding:
+                            self.kb["learned"][word_to_fix.lower()] = correct_word
 
                 # 5. Tense Shift
-                if check_id == "common.Will":
+                if "Will" in check_id:
                     working_line = self._fix_tense(working_line)
 
             # --- PHASE B: GLOBAL ENFORCEMENT PASS ---
