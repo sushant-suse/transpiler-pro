@@ -1,52 +1,57 @@
 = 🏗 System Architecture & Module Interaction
-:toc: left
-:icons: font
+:description: Architecture documentation for the Transpiler-Pro documentation pipeline.
 
-Transpiler-Pro is built on a *Decoupled Logic Architecture*. The Python source code remains "pure"—it contains the algorithms for transformation but contains no hardcoded strings, branding or specific grammar rules. Instead, it consumes data from the *SUSE Style Guide* and a *Persistent Knowledge Base*.
+Transpiler-Pro is built on a *Decoupled Logic Architecture*. The Python source code remains "pure"—it contains the core algorithms for transformation but relies on externalized data. It dynamically consumes the *Official SUSE Style Guide* and a *Persistent Knowledge Base* to drive its decision-making.
 
 == 🛰 Orchestration Layer
 
-* `cli.py`:: The central conductor. It manages the lifecycle of a transpilation job using *Typer*. It handles recursive file discovery, ensures the output directory mirrors the input structure, and executes the final *Antora Refinement* (header injection and path normalization).
+* `cli.py` - The central conductor utilizing *Typer*. It manages the command lifecycle (`sync`, `x-convert`, `y-repair`, and `full-run`). It handles path resolution via `utils/paths.py`, ensures directory mirror-integrity, and orchestrates the comparison between initial and final linting reports to calculate "fixed" metrics.
+* `utils/logger.py` - The Audit Engine. It transforms raw linter violations into a clickable Markdown report. It utilizes the `file://` protocol for absolute URI linking, allowing developers to jump directly from the report to the specific line in their IDE.
 
 == ⚙️ Core Transformation & Repair Layer
 
 === 1. `core/converter.py` (The Structural Engineer)
 
-Handles the "Shield-Transpile-Restore" workflow:
+Handles the "Shield-Transpile-Restore" workflow to preserve document intent:
 
-* *Shielding* - Protects complex Markdown elements (Admonitions, Collapsibles, XREFs) using regex-defined markers from `pyproject.toml`.
+* *Shielding* - Protects complex Markdown elements (Admonitions, Collapsibles, XREFs) from being mangled by standard conversion tools using regex-defined markers.
 * *Structural Conversion* - Executes `kramdoc` for standard Markdown-to-AsciiDoc conversion.
-* *Restoration* - Replaces markers with high-fidelity, Antora-compliant AsciiDoc blocks.
+* *Restoration* - Replaces markers with high-fidelity, Antora-compliant AsciiDoc blocks (for example, `[%collapsible]`).
 
 === 2. `core/linter.py` (The Style Sensor)
 
-Integrates the *Vale CLI* as a diagnostic engine. It maps the official SUSE style library against the generated AsciiDoc. It does not just find errors; it extracts *Correction Metadata* (suggestions, rule IDs, and triggers) to fuel the Fixer.
+Integrates the *Vale CLI* as a diagnostic engine. It maps the *SUSE Style Guide* repository against the generated AsciiDoc. It extracts critical *Correction Metadata*—including Line Numbers, Severity and Rule IDs—providing the data required for both automated healing and manual audit logging.
 
-=== 3. `core/fixer.py` (The NLP Healer & Learner)
-The most sophisticated layer, utilizing *spaCy NLP* and a *Dynamic Knowledge Base*:
+=== 3. `core/repair.py` (The Recursive NLP Healer)
 
-* *Grammar Repair* - Uses Dependency Parsing to fix tenses. It identifies the "Head" verb and its "Subjects" to choose correct progressive forms (for example, "The nodes are" vs. "The node is").
-* *Learning Engine* - If a spelling error is found that is not in the knowledge base, it logs the discovery to `data/knowledge_base.json`.
-* *Global Enforcement* - A safety-net pass that ensures branding (SUSE, Wi-Fi) is corrected even if the linter fails to flag it.
+The linguistic intelligence layer, utilizing *spaCy NLP* and aggressive regex:
 
-== 🔄 The Smart-Pipeline Data Flow
+* *Branding Enforcement* - Uses whitespace-agnostic lookarounds to force correct branding (for example, `Wi-Fi`, `SUSE`) even when text is adjacent to symbols or list markers.
+* *Recursive Tense Shifting* - Uses Dependency Parsing to identify auxiliary verb chains (will, should, must). It recursively searches the dependency tree to collapse modal clusters into the active present tense, handling both Verb and Adjective heads.
+* *Morphological Conjugation* - Dynamically generates third-person singular forms based on the verb lemma (for example, `verify` -> `verifies`, `be` -> `is`).
 
-. *Ingestion* -  Markdown is pulled from `data/inputs/`.
-. *Conversion (Phase 1)* - Structural transformation occurs; complex blocks are converted to Antora-standard syntax.
-. *Validation (Phase 2)* - The Linter generates a "Violation Map" of style and branding errors.
-. *Auto-Heal (Phase 2.5)* - The Fixer performs three sub-passes:
-** *Contextual Grammar*: Tense correction via NLP.
-** *Surgical Removal*: Deletion of editorial "fluff" (very, simple, note that).
-** *Branding Pass*: Force-caps and casing from the Knowledge Base.
-. *Final Refinement (Phase 3)* - Antora headers (`:experimental:`, `:toc:`, etc.) are injected, and the Knowledge Base is saved.
+=== 4. `core/fixer.py` (The Rule-Based Engine)
+
+A surgical regex layer that handles non-grammatical style violations. It processes "trigger-based" suggestions from the linter, such as removing editorializing phrases ("note that", "very") or applying specific term substitutions defined in the knowledge base.
+
+== 🔄 The Multi-Phase Data Flow
+
+. *Synchronization (`sync`)* -  Pulls the latest rules from the official openSUSE style guide repository into `styles/suse-styles/`.
+. *Ingestion* - Markdown is pulled from `data/inputs/`.
+. *Conversion (Phase X)* - Structural transformation occurs via `converter.py`; raw AsciiDoc is saved to `data/intermediate/`.
+. *Validation (Phase Y - Part 1)* - The Linter generates an initial "Violation Map".
+. *Linguistic Healing (Phase Y - Part 2)* -
+** *NLP Pass*: `repair.py` performs tense shifting and branding normalization.
+** *Regex Pass*: `fixer.py` performs surgical deletions and rule-based swaps.
+. *Final Audit (Phase Y - Part 3)* - A second linter pass is executed. Any surviving issues are logged to the `Audit Report`, and the CLI displays the final "Fixed vs. Remaining" summary.
 
 == 📁 Data Driven Layout
 
 [cols="1,2,2", options="header"]
 |===
 | Component | Responsibility | Source of Truth
-| *Fixer Logic* | How to fix a sentence. | `fixer.py`
-| *Branding Data* | Which words to fix. | `data/knowledge_base.json`
-| *Grammar Rules* | Irregular verb conjugations. | `pyproject.toml`
-| *Style Rules* | SUSE technical standards. | `styles/suse-styles/`
+| *Sync Logic* | Repository management. | `pyproject.toml` (`official_style_guide`)
+| *Branding Data* | Terminology & casing. | `data/knowledge_base.json` (`automated_fixes`)
+| *Grammar Rules* | Verb morphology & irregulars. | `repair.py` & `spaCy` model
+| *Style Standards* | SUSE technical rules. | `styles/suse-styles/`
 |===

@@ -1,6 +1,6 @@
 """
 Location: src/transpiler_pro/cli.py
-Description: Orchestration Layer for Transpiler-Pro.
+Description: Orchestration Layer for Transpiler-Pro with Git Sync and Full Pipeline execution.
 """
 
 import tomllib
@@ -17,7 +17,7 @@ from transpiler_pro.core.fixer import StyleFixer
 from transpiler_pro.core.linter import StyleLinter
 from transpiler_pro.core.repair import LinguisticEngine
 from transpiler_pro.utils.logger import AuditLogger
-from transpiler_pro.utils.paths import INPUT_DIR, INTERMEDIATE_DIR, OUTPUT_DIR
+from transpiler_pro.utils.paths import INPUT_DIR, INTERMEDIATE_DIR, OUTPUT_DIR, STYLES_DIR
 
 app = typer.Typer(
     name="transpiler-pro",
@@ -30,36 +30,44 @@ console = Console()
 DEFAULT_CONFIG = Path("pyproject.toml")
 
 def load_config(config_path: Path) -> Dict[str, Any]:
-    """Loads global pipeline settings from a TOML configuration file."""
+    """Loads global pipeline settings."""
     if not config_path.exists():
         return {}
     try:
         with open(config_path, "rb") as f:
-            # Navigate to [tool.transpiler-pro]
             return tomllib.load(f).get("tool", {}).get("transpiler-pro", {})
     except Exception:
         return {}
 
-def sync_styles() -> None:
-    """Synchronizes the SUSE Style Guide submodule via Git."""
-    console.print("\n[bold blue]Pre-flight:[/] Syncing SUSE Style Guide via Git...")
+@app.command(name="sync")
+def sync_styles(config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")) -> None:
+    """Synchronizes the SUSE Style Guide repository via Git."""
+    pipeline_config = load_config(Path(config))
+    repo_url = pipeline_config.get("pipeline", {}).get(
+        "official_style_guide", 
+        "https://github.com/openSUSE/suse-vale-styleguide.git"
+    )
+    target_dir = STYLES_DIR / "suse-styles"
+
+    console.print(f"\n[bold blue]Sync:[/] Updating Style Guide from [cyan]{repo_url}[/]")
+    
     try:
-        subprocess.run(
-            ["git", "submodule", "update", "--init", "--remote", "styles/suse-styles"],
-            check=True, capture_output=True, text=True
-        )
-        console.print("  [bold green]✓[/] Style guide is synchronized.")
-    except Exception:
-        console.print("  [bold yellow]⚠️ Warning:[/] Sync failed. Using local cached styles.")
+        if not target_dir.exists():
+            console.print("  [yellow]➜[/] Cloning fresh repository...")
+            subprocess.run(["git", "clone", repo_url, str(target_dir)], check=True, capture_output=True)
+        else:
+            console.print("  [yellow]➜[/] Pulling latest changes...")
+            subprocess.run(["git", "-C", str(target_dir), "pull"], check=True, capture_output=True)
+        console.print("  [bold green]✓[/] Style guide is up to date.")
+    except Exception as e:
+        console.print(f"  [bold yellow]⚠️ Warning:[/] Sync failed. Using local cache. Error: {e}")
 
 @app.command(name="x-convert")
 def convert_x(
     file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific MD file"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
-    """
-    COMMAND X: Converts Markdown files to raw AsciiDoc in the intermediate directory.
-    """
+    """COMMAND X: Converts Markdown files to raw AsciiDoc."""
     config_path = Path(config)
     pipeline_config = load_config(config_path)
     converter = DocConverter(config_path=config_path)
@@ -79,28 +87,19 @@ def convert_x(
 
 @app.command(name="y-repair")
 def repair_y(
-    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific ADOC file in intermediate"),
-    fix: bool = typer.Option(True, "--fix/--no-fix", help="Apply auto-repairs"),
+    file_name: Optional[str] = typer.Option(None, "--file", "-f"),
+    fix: bool = typer.Option(True, "--fix/--no-fix"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
-    """
-    COMMAND Y: Validates and repairs AsciiDoc files using NLP and Style Guide rules.
-    """
+    """COMMAND Y: Validates and repairs AsciiDoc files."""
     config_path = Path(config)
     pipeline_config = load_config(config_path)
     
-    # 🔍 FIX: Explicitly isolate the branding fixes. 
-    # This prevents the 'learned' category from turning your text into the word 'spellings'.
-    automated_fixes = pipeline_config.get("automated_fixes", {})
-    repair_engine = LinguisticEngine(knowledge_base={"automated_fixes": automated_fixes})
-    
+    repair_engine = LinguisticEngine(knowledge_base=pipeline_config)
     audit_logger = AuditLogger()
     fixer = StyleFixer(config_path=config_path)
 
-    if file_name:
-        target_files = [INTERMEDIATE_DIR / file_name]
-    else:
-        target_files = list(INTERMEDIATE_DIR.glob("*.adoc"))
+    target_files = [INTERMEDIATE_DIR / file_name] if file_name else list(INTERMEDIATE_DIR.glob("*.adoc"))
 
     for inter_path in target_files:
         if not inter_path.exists(): 
@@ -108,59 +107,64 @@ def repair_y(
         
         final_path = OUTPUT_DIR / inter_path.name
         shutil.copy(inter_path, final_path)
-        
         console.print(f"\n[bold blue]Y-Phase:[/] Validating [cyan]{final_path.name}[/]")
         
-        # 1. INITIAL LINT
         linter = StyleLinter(final_path, config_path=config_path)
         linter.setup_config()
+        
         initial_findings = linter.run()
         linter.display_report(initial_findings)
-
+        
         if fix and initial_findings:
-            # 2. LINGUISTIC REPAIR (NLP Tenses + Brand mappings)
+            # 1. Healing
             content = final_path.read_text(encoding="utf-8")
-            healed_content = repair_engine.repair_text(content)
-            final_path.write_text(healed_content, encoding="utf-8")
-
-            # 3. RULE-BASED REPAIR (Regex patterns from fixer engine)
+            healed = repair_engine.repair_text(content)
+            final_path.write_text(healed, encoding="utf-8")
+            
             file_key = str(final_path.resolve())
-            file_violations = initial_findings.get(file_key, [])
-            if file_violations:
-                fixer.fix_file(final_path, file_violations)
+            fixer.fix_file(final_path, initial_findings.get(file_key, []))
 
-            # 4. FINAL AUDIT & LOGGING
+            # 2. Re-scan & Reporting
             console.print(f"  [bold green]✨ Processing complete for {final_path.name}.[/]")
             final_findings = linter.run()
             linter.display_report(final_findings)
             
-            # Map residual issues to the Audit Report
+            # CALCULATE DYNAMIC SUMMARY
+            initial_count = len(initial_findings.get(file_key, []))
             residual_violations = final_findings.get(file_key, [])
+            residual_count = len(residual_violations)
+            fixed_count = initial_count - residual_count
+            
             for v in residual_violations:
                 audit_logger.log_issue(
                     file_path=str(final_path),
-                    # Use .get() to handle varying Vale JSON field casing
-                    line=v.get("Line") or v.get("line") or 1,
-                    severity=v.get("Severity") or v.get("severity") or "warning",
-                    message=v.get("Message") or v.get("message") or "Review style",
-                    rule_id=v.get("Check") or v.get("check") or "Style.General"
+                    line=v.get("Line") or 1,
+                    severity=v.get("Severity") or "warning",
+                    message=v.get("Message") or "Review style",
+                    rule_id=v.get("Check") or "Style.General"
                 )
             
-            if residual_violations:
-                console.print(f"  [bold yellow]📋 {len(residual_violations)} items logged to audit report.[/]")
+            if residual_count > 0:
+                console.print(f"  [bold green]{fixed_count} fixed.[/] [bold yellow]📋 {residual_count} items require manual attention. See logs.[/]")
+            else:
+                console.print(f"  [bold green]✅ {fixed_count} fixed. Document is style-guide perfect![/]")
 
-@app.command(name="run")
+@app.command(name="full-run")
 def execute_full_pipeline(
-    file_name: Optional[str] = typer.Option(None, "--file", "-f"),
-    fix: bool = typer.Option(True, "--fix"),
-    sync: bool = typer.Option(False, "--sync"),
+    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific file"),
+    sync: bool = typer.Option(True, "--sync/--no-sync", help="Pull latest styles before running"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
-    """FULL PIPELINE: Executes both Command X and Command Y sequentially."""
+    """THE COMBO COMMAND: Performs Sync, Command X, and Command Y sequentially."""
     if sync:
-        sync_styles()
+        sync_styles(config=config)
+    
+    # Run Conversion
     convert_x(file_name=file_name, config=config)
-    repair_y(file_name=file_name, fix=fix, config=config)
+    
+    # Run Repair (If file_name was test.md, Command Y needs test.adoc)
+    adoc_file = Path(file_name).with_suffix(".adoc").name if file_name else None
+    repair_y(file_name=adoc_file, fix=True, config=config)
 
 def main():
     app()
