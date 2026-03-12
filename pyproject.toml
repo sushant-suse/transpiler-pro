@@ -52,6 +52,8 @@ target-version = "py312"
 [tool.transpiler-pro.pipeline]
 supported_extensions = [".md", ".mdx"]
 knowledge_base = "data/knowledge_base.json"
+# Centralized source for the sync command
+official_style_guide = "https://github.com/openSUSE/suse-vale-styleguide.git"
 
 [tool.transpiler-pro.grammar]
 special_verbs = { "setup" = "setting up", "stop" = "stopping", "check" = "checking", "reboot" = "rebooting", "backup" = "backing up", "fix" = "fixing", "finish" = "finishing" }

@@ -1,12 +1,13 @@
 """
 Location: src/transpiler_pro/core/repair.py
-Description: Linguistic Repair Engine for Transpiler-Pro.
+Description: Advanced Dynamic Linguistic Repair Engine.
+Handles whitespace-agnostic branding and recursive dependency healing.
 """
-
 import spacy
 import re
+from pathlib import Path
 
-# Load the NLP model
+# Load spaCy
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
@@ -16,69 +17,59 @@ except OSError:
 
 class LinguisticEngine:
     def __init__(self, knowledge_base: dict):
-        # Explicitly target automated_fixes to prevent 'learned' categories leaking in
+        # Isolate ONLY automated_fixes to prevent the 'spellings' bug
         self.kb = knowledge_base.get("automated_fixes", {})
 
     def repair_text(self, text: str) -> str:
-        """Runs the full linguistic healing pipeline."""
+        """Heals text using whitespace-agnostic lookarounds and modal-verb collapsing."""
         
-        # 1. Branding & High-Confidence Fixes
-        # We sort by length descending so "Wi-Fi Settings" is fixed before "Wi-Fi"
-        sorted_errors = sorted(self.kb.keys(), key=len, reverse=True)
-        
-        for error in sorted_errors:
-            fix = self.kb[error]
-            # SAFETY: If the fix value is "spellings", it's a category name, not a fix. Skip it.
-            if fix.lower() == "spellings":
-                continue
-                
-            # \b ensures we only match whole words
-            text = re.sub(rf"\b{re.escape(error)}\b", fix, text, flags=re.IGNORECASE)
-
-        # 2. NLP Tense Shifting (Future -> Active Present)
-        doc = nlp(text)
-        corrected_text = text
-        
-        # Track replacements to prevent string offset issues
-        replacements = {}
-
-        for token in doc:
-            # Detect Future Auxiliaries (will, shall) attached to a Verb
-            if token.dep_ == "aux" and token.lemma_.lower() in ["will", "shall"]:
-                verb = token.head
-                if verb.pos_ in ["VERB", "AUX"]:
-                    # Create the phrase found in text (e.g., "will setup")
-                    future_phrase = f"{token.text} {verb.text}"
-                    present_verb = self._conjugate_to_present(verb)
-                    
-                    # Map the specific phrase to its conjugated form
-                    replacements[future_phrase] = present_verb
-        
-        # Apply NLP replacements using regex for word boundary safety
-        for future, present in replacements.items():
-            corrected_text = re.sub(rf"\b{re.escape(future)}\b", present, corrected_text)
+        # --- PASS 1: Aggressive Branding (Case Insensitive + Symbol Safe) ---
+        sorted_keys = sorted(self.kb.keys(), key=len, reverse=True)
+        for key in sorted_keys:
+            replacement = self.kb[key]
+            if replacement.lower() == "spellings": continue
             
-        return corrected_text
+            # Use Lookarounds: Match key if not preceded/followed by a letter or number
+            # This catches 'wifi' in bullet points like '* wifi' flawlessly.
+            pattern = rf"(?i)(?<![a-zA-Z0-9]){re.escape(key)}(?![a-zA-Z0-9])"
+            text = re.sub(pattern, replacement, text)
 
-    def _conjugate_to_present(self, verb_token) -> str:
-        """
-        Conjugates a verb to 3rd person singular present.
-        Example: verify -> verifies, support -> supports, be -> is.
-        """
-        lemma = verb_token.lemma_.lower()
+        # --- PASS 2: Recursive NLP Tense Shift ---
+        doc = nlp(text)
+        tense_map = {}
         
-        # 1. Special case: 'be' (will be -> is)
-        if lemma == "be":
-            return "is"
+        for token in doc:
+            # Detect ANY auxiliary (will, shall, should, must, etc.)
+            if token.pos_ == "AUX" and token.dep_ == "aux":
+                head = token.head
+                # Catch "should be", "will verify", "must check"
+                # head.pos_ can be VERB, AUX, or even ADJ in passive docs
+                if head.pos_ in ["VERB", "AUX", "ADJ"]:
+                    # Create phrase regex handling any amount of whitespace
+                    phrase_regex = rf"{re.escape(token.text)}\s+{re.escape(head.text)}"
+                    
+                    # Generate the present tense form
+                    present_form = self._conjugate_to_present(head)
+                    tense_map[phrase_regex] = present_form
+
+        # Apply tense replacements with boundary safety
+        for phrase, replacement in tense_map.items():
+            text = re.sub(rf"(?i)(?<![a-zA-Z0-9]){phrase}(?![a-zA-Z0-9])", replacement, text)
+
+        return text
+
+    def _conjugate_to_present(self, token) -> str:
+        """Dynamic Morphological Conjugation for technical documentation."""
+        lemma = token.lemma_.lower()
         
-        # 2. Rule: Consonant + 'y' -> 'ies' (verify -> verifies)
-        # Check that there is a character before 'y' and it's not a vowel
+        # 1. irregulars common in technical instructions
+        if lemma == "be": return "is"
+        if lemma == "have": return "has"
+        
+        # 2. Dynamic Suffix Rules
+        if lemma.endswith(("s", "sh", "ch", "x", "z")):
+            return lemma + "es"
         if lemma.endswith("y") and len(lemma) > 1 and lemma[-2] not in "aeiou":
             return lemma[:-1] + "ies"
         
-        # 3. Rule: Sibilant endings -> 'es' (fix -> fixes, watch -> watches, brush -> brushes)
-        if lemma.endswith(("s", "sh", "ch", "x", "z")):
-            return lemma + "es"
-            
-        # 4. Standard Rule: + 's' (support -> supports)
         return lemma + "s"
