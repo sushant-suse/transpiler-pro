@@ -5,7 +5,6 @@ Handles whitespace-agnostic branding and recursive dependency healing.
 """
 import spacy
 import re
-from pathlib import Path
 
 # Load spaCy
 try:
@@ -27,7 +26,8 @@ class LinguisticEngine:
         sorted_keys = sorted(self.kb.keys(), key=len, reverse=True)
         for key in sorted_keys:
             replacement = self.kb[key]
-            if replacement.lower() == "spellings": continue
+            if replacement.lower() == "spellings": 
+                continue
             
             # Use Lookarounds: Match key if not preceded/followed by a letter or number
             # This catches 'wifi' in bullet points like '* wifi' flawlessly.
@@ -63,8 +63,10 @@ class LinguisticEngine:
         lemma = token.lemma_.lower()
         
         # 1. irregulars common in technical instructions
-        if lemma == "be": return "is"
-        if lemma == "have": return "has"
+        if lemma == "be": 
+            return "is"
+        if lemma == "have": 
+            return "has"
         
         # 2. Dynamic Suffix Rules
         if lemma.endswith(("s", "sh", "ch", "x", "z")):

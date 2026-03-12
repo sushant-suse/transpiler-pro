@@ -79,7 +79,8 @@ def convert_x(
         target_files = [p for p in INPUT_DIR.iterdir() if p.suffix in exts]
 
     for md_path in target_files:
-        if not md_path.exists(): continue
+        if not md_path.exists(): 
+            continue
         inter_path = INTERMEDIATE_DIR / md_path.with_suffix(".adoc").name
         console.print(f"[bold blue]X-Phase:[/] Converting [cyan]{md_path.name}[/] -> [yellow]{inter_path.name}[/]")
         converter.convert_file(md_path, inter_path)
@@ -101,7 +102,8 @@ def repair_y(
     target_files = [INTERMEDIATE_DIR / file_name] if file_name else list(INTERMEDIATE_DIR.glob("*.adoc"))
 
     for inter_path in target_files:
-        if not inter_path.exists(): continue
+        if not inter_path.exists(): 
+            continue
         
         final_path = OUTPUT_DIR / inter_path.name
         shutil.copy(inter_path, final_path)
