@@ -1,6 +1,6 @@
 = Rigorous Stress Test
 :description: Testing the structural conversion and NLP healing.
-:revdate: 2026-03-12
+:revdate: 2026-03-23
 
 == Heading Level 2
 
@@ -55,7 +55,6 @@ def check_status():
 * The wifi should be connected.
 
 === Prerequisites Numbered
-
 . You must have 8GB of RAM.
 . The wifi should be connected.
 
@@ -99,9 +98,9 @@ The user will execute the script instead of the manual process. The nodes is cur
 
 == Section 2: Configuration Details
 
-Check the advanced config for your wifi settings. We will configure the ip address and the id of the device. If you want to change the config, look at the xref:setup.adoc[Setup Guide]. We will stop the service before we will reboot the node.
+Check the advanced config for your wifi settings. We will configure the ip address and the id of the device. If you want to change the config, look at the xref:./setup.md[Setup Guide]. We will stop the service before we will reboot the node.
 
-For more info, see xref:inputs/sub-folder/test2.adoc[Detailed Specs].
+For more info, see xref:./inputs/sub-folder/test2.md[Detailed Specs].
 
 For more info, click imagen here: image:https://example.com/image.png[Image]
 
