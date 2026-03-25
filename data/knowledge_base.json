@@ -2,14 +2,7 @@
     "automated_fixes": {
         "suse": "SUSE",
         "wifi": "Wi-Fi",
-        "ip": "IP",
-        "config": "configuration"
-    },
-    "tense_rules": {
-        "will be": "is",
-        "will check": "checks",
-        "will verify": "verifies",
-        "will fix": "fixes"
+        "ip": "IP"
     },
     "ignored_rules": [
         "asciidoc.NoWidthForFigures",

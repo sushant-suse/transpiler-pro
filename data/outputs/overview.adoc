@@ -2,7 +2,7 @@
 :description: Manage your Losant Application and it's resources on your local disk.
 :sidebar_position: 1
 :sidebar_label: Overview
-:revdate: 2026-03-25
+:revdate: 2026-03-26
 
 Losant CLI is a command line tool to help manage your xref:applications/overview.adoc[Losant Application] and its resources. It easily lets you manage xref:experiences/views.adoc[Experience Views], xref:experiences/versions.adoc[Experience Versions], xref:data-tables/overview.adoc[Data Tables], and xref:applications/files.adoc[Files] in your Applications.
 
@@ -58,7 +58,7 @@ Create or go to a directory that you want to keep your Losant Application resour
 
 image::cli/configure.png[Losant Configure,title="Configure"]
 
-When you run this command, you is prompted to give a (or part of a) Losant Application name. If multiple Applications come back with similar names we present you with a list to choose from. If you don't find the application you are looking for, choose `none of these, search again`, and it res-prompt you for another Application name.
+When you run this command, you is prompted to give a (or part of a) Losant Application name. If multiple Applications come back with similar names we present you with a list to choose from. If you don't find the application you are looking for, choose `none of these, search again`, and it re-prompts you for another Application name.
 
 Once you have picked the Losant Application, it will automatically try to download your Application's xref:experiences/views.adoc[Experience Views]. It will then prompt you to download your xref:applications/files.adoc[Application's Files] followed by your xref:data-tables/overview.adoc[Application's Data Tables].
 

@@ -99,7 +99,6 @@ class StyleFixer:
     def _fix_tense(self, line: str) -> str:
         """
         Shifts sentence tense from future ('will') to progressive present.
-        
         Example: "We will test" -> "We are testing".
         """
         if not self.nlp: 

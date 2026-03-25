@@ -1,5 +1,6 @@
 import spacy
 import re
+from spacy.util import filter_spans
 
 try:
     nlp = spacy.load("en_core_web_sm")
@@ -35,6 +36,17 @@ class LinguisticEngine:
 
         # PASS 2: Recursive NLP Tense Shift (Fixed for Subject Agreement)
         doc = nlp(text)
+        
+        # --- FIX A: HYPHEN MERGER (Safe for dates and multi-hyphens) ---
+        spans_to_merge = []
+        for token in doc:
+            if token.text == "-" and token.i > 0 and token.i < len(doc) - 1:
+                spans_to_merge.append(doc[token.i - 1 : token.i + 2])
+                
+        with doc.retokenize() as retokenizer:
+            for span in filter_spans(spans_to_merge):
+                retokenizer.merge(span)
+        
         tense_map = {}
         
         for token in doc:
@@ -46,37 +58,42 @@ class LinguisticEngine:
             # --- FINAL BOSS: ADVANCED SUBJECT & PLURALITY AWARENESS ---
             if token.pos_ == "AUX" and token.lemma_ == "will":
                 head = token.head
-                if head.pos_ in ["VERB", "AUX"]:
+                
+                # 1. Broaden POS check: spaCy sometimes mis-tags verbs as NOUNs or ADJs after 'will'
+                if head.pos_ in ["VERB", "AUX", "NOUN", "ADJ"]:
                     
-                    # 1. Hunt down the true Subject (catches passives 'nsubjpass' and nested clauses)
+                    # 2. Hunt down the true Subject via dependency tree
                     subjects = [w for w in head.children if "subj" in w.dep_]
-                    if not subjects and head.head != head:
-                        subjects = [w for w in head.head.children if "subj" in w.dep_]
                     
-                    # 2. Determine Plurality and User-Centricity
-                    is_user = any(s.lemma_.lower() in ["you", "we", "i"] for s in subjects)
+                    # 3. PROXIMITY FALLBACK: If tree fails (e.g., "we will reboot")
+                    if not subjects and token.i > 0:
+                        prev_word = doc[token.i - 1]
+                        if prev_word.pos_ in ["PRON", "NOUN", "PROPN", "X"]:
+                            subjects = [prev_word]
+                    
+                    # 4. Determine Plurality (Bypassing the -PRON- lemma trap)
                     is_plural = False
-                    
-                    if is_user:
-                        is_plural = True  # You/We/I always take plural verb forms (are, check, prompt)
-                    elif subjects:
-                        for s in subjects:
-                            # Catch explicit plurals ("tables", "components") or plural tags (NNS)
-                            if s.tag_ in ["NNS", "NNPS"] or "Number=Plur" in str(s.morph) or s.lemma_.lower() == "they":
-                                is_plural = True
+                    for s in subjects:
+                        t = s.text.lower()
+                        # Check exact text for user pronouns and 'they'
+                        if t in ["you", "we", "i", "they"]:
+                            is_plural = True
+                        # Check spaCy plural tags
+                        elif s.tag_ in ["NNS", "NNPS"] or "Number=Plur" in str(s.morph):
+                            is_plural = True
+                        # Failsafe: If it ends in 's' but isn't a known singular exception
+                        elif t.endswith('s') and t not in ["status", "process", "this", "us", "analysis", "is", "address", "class"]:
+                            is_plural = True
                                 
-                    # 3. Conjugate correctly based on the findings
+                    # 5. Conjugate safely
                     if "-" in head.text:
-                        # Protect hyphenated words from the internal conjugator ("re-prompt")
                         replacement = head.text if is_plural else f"{head.text}s"
                     else:
                         if head.lemma_ == "be":
                             replacement = "are" if is_plural else "is"
                         elif is_plural:
-                            # Base form for "You/We/I" and plural subjects (e.g., "reboot")
                             replacement = head.text
                         else:
-                            # 3rd person singular for "It", "The system", etc. (e.g., "reboots")
                             replacement = self._conjugate_to_present(head)
                             
                     pattern = rf"(?i)\b{token.text}\s+{re.escape(head.text)}\b"
@@ -90,12 +107,11 @@ class LinguisticEngine:
 
         return text
 
-    def _conjugate_to_present(self, token) -> str:
-        # Check if it's already at the start of a bullet or step (Keep Imperative)
-        # We don't want "Step 1: Runs"
-        lemma = token.lemma_.lower()
-        irregulars = {"be": "is", "have": "has", "do": "does", "go": "goes"}
-        if lemma in irregulars: return irregulars[lemma]
-        if lemma.endswith(("s", "sh", "ch", "x", "z")): return lemma + "es"
-        if lemma.endswith("y") and len(lemma) > 1 and lemma[-2] not in "aeiou": return lemma[:-1] + "ies"
-        return lemma + "s"
+    def _conjugate_to_present(self, verb_token) -> str:
+        text = verb_token.text
+        if text.endswith(('s', 'sh', 'ch', 'x', 'z')):
+            return text + "es"
+        elif text.endswith('y') and len(text) > 1 and text[-2] not in "aeiou":
+            return text[:-1] + "ies"
+        else:
+            return text + "s" # Properly handles "execute" -> "executes"
