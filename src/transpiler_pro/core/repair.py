@@ -38,26 +38,35 @@ class LinguisticEngine:
         tense_map = {}
         
         for token in doc:
+            if token.pos_ == "VERB":
+                auxiliaries = [w.lemma_.lower() for w in token.lefts if w.dep_ in ["aux", "auxpass"]]
+                if "have" in auxiliaries:
+                    continue
+                
             # --- SURGICAL FIX: Subject-Aware Tense Shifting ---
             if token.pos_ == "AUX" and token.lemma_ == "will":
                 head = token.head
                 if head.pos_ in ["VERB", "AUX"]:
-                    # 1. Identify the subjects of the verb
-                    subjects = [w for w in head.lefts if "subj" in w.dep_]
+                    # 1. Grab ALL subjects (including 'nsubjpass' for passive voice!)
+                    # This fixes the "You is prompted" bug.
+                    subjects = [w for w in head.children if "subj" in w.dep_]
                     
-                    # 2. Check if the subject is "User-centric" (You, We, I)
+                    # Also check the head's head in case of complex dependent clauses ("we reboots")
+                    if not subjects and head.head != head:
+                        subjects = [w for w in head.head.children if "subj" in w.dep_]
+                        
                     is_user_subject = any(s.lemma_.lower() in ["you", "we", "i"] for s in subjects)
                     
-                    if is_user_subject:
-                        # "You will be" -> "You are"
-                        # "You will check" -> "You check" (head.text is the base form)
-                        replacement = "are" if head.lemma_ == "be" else head.text
+                    # 2. Hyphenated Word Protection (Fixes "res-prompt")
+                    if "-" in head.text:
+                        replacement = head.text if is_user_subject else f"{head.text}s"
                     else:
-                        # "The system will be" -> "The system is"
-                        # "The system will check" -> "The system checks"
-                        replacement = self._conjugate_to_present(head)
+                        # 3. Base form for User, Conjugated for System
+                        if is_user_subject:
+                            replacement = "are" if head.lemma_ == "be" else head.text
+                        else:
+                            replacement = self._conjugate_to_present(head)
                     
-                    # 3. Create the mapping for the regex swap
                     pattern = rf"(?i)\b{token.text}\s+{re.escape(head.text)}\b"
                     tense_map[pattern] = replacement
 

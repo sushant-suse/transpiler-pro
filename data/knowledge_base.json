@@ -1,14 +1,9 @@
 {
     "automated_fixes": {
         "suse": "SUSE",
-        "Losant": "Losant",
         "wifi": "Wi-Fi",
         "ip": "IP",
-        "config": "configuration",
-        "imagen": "image",
-        "communiti": "community",
-        "blockquote": "block quote",
-        "setup": "set up"
+        "config": "configuration"
     },
     "tense_rules": {
         "will be": "is",

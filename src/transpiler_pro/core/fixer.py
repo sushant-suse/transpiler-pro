@@ -143,7 +143,7 @@ class StyleFixer:
         instead_of_trigger = patterns.get("instead_of_trigger", "instead of")
 
         # Combine branding and learned words for high-priority matching
-        session_branding = {**self.kb.get("learned", {}), **self.kb.get("branding", {})}
+        session_branding = {**self.kb.get("learned", {}), **self.kb.get("automated_fixes", {})}
 
         for line_num in sorted(line_map.keys(), reverse=True):
             idx = line_num - 1
@@ -205,14 +205,21 @@ class StyleFixer:
                     working_line = self._fix_tense(working_line)
 
             # --- PHASE B: GLOBAL ENFORCEMENT PASS ---
-            for wrong, correct in self.kb.get("branding", {}).items():
-                if re.search(rf"\b{re.escape(wrong)}\b", working_line, flags=re.IGNORECASE):
-                    working_line = re.sub(rf"\b{re.escape(wrong)}\b", correct, working_line)
+            # 1. Apply the automated fixes dictionary
+            for wrong, correct in self.kb.get("automated_fixes", {}).items():
+                # Use ignorecase to catch suse, Suse, etc., and enforce the exact case from JSON
+                working_line = re.sub(rf"\b{re.escape(wrong)}\b", correct, working_line, flags=re.IGNORECASE)
 
+            # 2. Fragment Healer: Capitalize the first letter of the sentence
+            # Finds start of line or a period+space, followed by a lowercase letter
+            working_line = re.sub(r'(^|\.\s+)([a-z])', lambda m: m.group(1) + m.group(2).upper(), working_line)
+
+            # Save if changed
             if working_line != original_line:
                 content[idx] = working_line
                 total_fixes += 1
 
+        # Write all lines back to the file
         file_path.write_text("\n".join(content), encoding="utf-8")
         self._save_kb() 
         return total_fixes

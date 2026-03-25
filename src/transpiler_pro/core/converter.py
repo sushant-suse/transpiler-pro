@@ -158,7 +158,7 @@ class DocConverter:
             if "inputs/" in path:
                 path = path.split("inputs/")[-1]
             
-            if path and not anchor:
+            if path:
                 path = f"{path}.adoc"
                 
             cl_anchor = ""
@@ -187,6 +187,16 @@ class DocConverter:
         content = re.sub(r"^(Section \d+:.*)$", r"= \1", content, flags=re.M)
         content = content.replace("PROTECTSPACE", " ").replace("SHIELDSEP", "\n")
         
+        # --- FIX: MERMAID DIAGRAM SYNTAX ---
+        # Converts [source,mermaid]\n---- to [mermaid]\n....
+        content = re.sub(r'\[source,mermaid\]\n----(.*?)----', r'[mermaid]\n....\1....', content, flags=re.DOTALL)
+
+        # --- FIX: TABS CONVERSION ---
+        # Converts SHIELD markers to Antora [tabs] extension syntax
+        content = content.replace("SHIELDADMONSTARTtabs", "[tabs]\n====")
+        content = content.replace("SHIELDADMONEND", "====")
+        content = re.sub(r'^@tab\s+(.*)$', r'\1::', content, flags=re.M)
+
         return header_block + content.strip()
     
     def convert_file(self, input_path: Path, output_path: Path) -> None:

@@ -26,29 +26,29 @@ Before you get started, there are a couple things you have to configure first. T
 
 After installing, one way to set up your user profile is to run the command `losant login`. This prompts you to enter your Losant account email address. If your user is *not* connected to a Single Sign-On Provider, you is prompted to enter your password, and optionally your multi-factor authentication code. *If you do not have multi-factor authentication enabled, just hit enter to skip multi-factor authentication.*
 
-image::cli/login.png[Losant Login,title="Login"]
+Image::cli/login.png[Losant Login,title="Login"]
 
 If you account is connected to a Single Sign-On Provider, you is prompted to enter a xref:#_creating_a_user_token[User Token].
 
-image::cli/login-token.png[Losant Login Token,title="Login Token"]
+Image::cli/login-token.png[Losant Login Token,title="Login Token"]
 
 Once you have successfully authenticated with our API, a file is created at `~/.losant/.credentials.yml` containing your authentication token. This token is used across all your Losant configured directories.
 
-image::cli/login-success.png[Losant Success Login,title="Login Success"]
+Image::cli/login-success.png[Losant Success Login,title="Login Success"]
 
 If authentication fails you is prompted to re-enter your email, password and multi-factor authentication.
 
-image::cli/login-failure.png[Losant Retry Login,title="Login Retry"]
+Image::cli/login-failure.png[Losant Retry Login,title="Login Retry"]
 
 === Set-Token
 
-image::cli/set-token.png[Losant Set-Token,title="Set-Token"]
+Image::cli/set-token.png[Losant Set-Token,title="Set-Token"]
 
 The second way to set up your user profile is to run the command `losant set-token [token]`. After installation, running this command prompts you to enter a xref:#_creating_a_user_token[User Token] or pass in the User Token as the command argument to avoid being prompted. The set-token command is an easy way to give a non-Losant user access to a specific application or all your applications without having to give them the full credentials to the UI.
 
 ==== Creating a User Token
 
-A xref:user-accounts/user-tokens.adoc[User Token] can be created in the xref:user-accounts/user-tokens#_generating_an_api_token[UI] or through the xref:rest-api/user-api-tokens#_post[API]. If you are using the UI to create a User Token, select the "CLI developer" permission option. This permission option scopes the exact permissions needed to manage only the resources that can be managed in the CLI. If you are creating a User Token with the API, set the field `scope` to `all.User.cli`.
+A xref:user-accounts/user-tokens.adoc[User Token] can be created in the xref:user-accounts/user-tokens.adoc#_generating_an_api_token[UI] or through the xref:rest-api/user-api-tokens.adoc#_post[API]. If you are using the UI to create a User Token, select the "CLI developer" permission option. This permission option scopes the exact permissions needed to manage only the resources that can be managed in the CLI. If you are creating a User Token with the API, set the field `scope` to `all.User.cli`.
 
 === Configure
 
@@ -56,13 +56,13 @@ After you have successfully set up your user profile, you are now ready to confi
 
 Create or go to a directory that you want to keep your Losant Application resources, then run `losant configure`. This links the current directory to one of your Losant Applications.
 
-image::cli/configure.png[Losant Configure,title="Configure"]
+Image::cli/configure.png[Losant Configure,title="Configure"]
 
 When you run this command, you is prompted to give a (or part of a) Losant Application name. If multiple Applications come back with similar names we present you with a list to choose from. If you don't find the application you are looking for, choose `none of these, search again`, and it res-prompt you for another Application name.
 
 Once you have picked the Losant Application, it will automatically try to download your Application's xref:experiences/views.adoc[Experience Views]. It will then prompt you to download your xref:applications/files.adoc[Application's Files] followed by your xref:data-tables/overview.adoc[Application's Data Tables].
 
-image::cli/configure-success.png[Losant Configure Success,title="Configure Success"]
+Image::cli/configure-success.png[Losant Configure Success,title="Configure Success"]
 
 Once you have configured the directory, you notice a few newly created directories in your configured directory.
 
@@ -73,4 +73,4 @@ Once you have configured the directory, you notice a few newly created directori
 * `experience/components/`: This is where all your local experience components is.
 * `experience/pages/`: This is where all your local experience pages is.
 * `experience/layouts/`: This is where all your local experience layouts is.
-* `files/`: This is where all your local files is. The Files directory matches the top-level directory on your Application's xref:applications/files#_public_files[public Files]. For example, if on Losant you have a public file at `/foo/bar/helloworld.txt`, that file is downloaded and placed at `files/foo/bar/helloworld.txt`. (xref:applications/files#_private_files[Private files] are not supported by the Losant CLI.)
+* `files/`: This is where all your local files is. The Files directory matches the top-level directory on your Application's xref:applications/files.adoc#_public_files[public Files]. For example, if on Losant you have a public file at `/foo/bar/helloworld.txt`, that file is downloaded and placed at `files/foo/bar/helloworld.txt`. (xref:applications/files.adoc#_private_files[Private files] are not supported by the Losant CLI.)

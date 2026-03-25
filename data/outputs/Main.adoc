@@ -30,7 +30,7 @@ You can find more details at https://www.suse.com[SUSE Documentation].
 
 === Network Settings
 
-image::https://example.com/network.png[Network Diagram]
+Image::https://example.com/network.png[Network Diagram]
 
 [cols="<,^,>",options="header",]
 |===
@@ -52,11 +52,11 @@ def check_status():
 === Prerequisites Bulleted
 
 * You must have 8GB of RAM.
-* The wifi should be connected.
+* The Wi-Fi should be connected.
 
 === Prerequisites Numbered
 . You must have 8GB of RAM.
-. The wifi should be connected.
+. The Wi-Fi should be connected.
 
 === Configuration
 
@@ -88,17 +88,17 @@ This is a blockquote often used as a note in Markdown.
 This is another blockquote often used as a note in Markdown.
 ====
 
-== Section 1: Introduction to suse
+== Section 1: Introduction to SUSE
 
-In this guide, we setup the environment for the user. It is important to suse is a easy system to manage. We check the wifi status before we start the installation.
+In this guide, we setup the environment for the user. It is important to SUSE is a easy system to manage. We check the Wi-Fi status before we start the installation.
 
-image::/img/logos/suse-logo-primary.svg[SUSE Logo]
+Image::/img/logos/SUSE-logo-primary.svg[SUSE Logo]
 
 The user executes the script instead of the manual process. The nodes is currently inactive.
 
 == Section 2: Configuration Details
 
-Check the advanced configuration for your wifi settings. We configure the ip address and the id of the device. to change the configuration, look at the xref:setup.adoc[Setup Guide]. We stop the service before we reboots the node.
+Check the advanced configuration for your Wi-Fi settings. We configure the IP address and the id of the device. To change the configuration, look at the xref:setup.adoc[Setup Guide]. We stop the service before we reboots the node.
 
 For more info, see xref:sub-folder/test2.adoc[Detailed Specs].
 
@@ -106,15 +106,15 @@ For more info, click imagen here: image:https://example.com/image.png[Image]
 
 === Section 3: Technical Specifications
 
-The system reboots automatically. It is fast. We setup the database and we verify the connection. Check the configuration for the ip settings. The setup is easy and fast for suse.
+The system reboots automatically. It is fast. We setup the database and we verify the connection. Check the configuration for the IP settings. The setup is easy and fast for SUSE.
 
 ==== Section 4: Maintenance
 
-We backup the data. It is safe. We check the wifi and the ip every day. to perform a check, run the script. The id of the node is important for the suse manager. We finish the setup and then we restart.
+We backup the data. It is safe. We check the Wi-Fi and the IP every day. To perform a check, run the script. The id of the node is important for the SUSE manager. We finish the setup and then we restart.
 
 ===== Section 5: Troubleshooting
 
-If the wifi is down, we check the ip. The configuration is hard to find if you do not know where to look.
+If the Wi-Fi is down, we check the IP. The configuration is hard to find if you do not know where to look.
 
 .Complex Setup
 [%collapsible]
@@ -127,4 +127,4 @@ Nested shielded block inside a collapsible. We verify this.
 
 ===== Section 6: Final Notes
 
-We fix the id error. It is easy to use suse.
+We fix the id error. It is easy to use SUSE.

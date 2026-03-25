@@ -3,17 +3,18 @@
 
 == Markdown Tabs
 
-SHIELDADMONSTARTtabs
+[tabs]
+====
 
-@tab Step 1: Initialize
+Step 1: Initialize::
 
 Run the `init` command to start.
 
-@tab Step 2: Configure
+Step 2: Configure::
 
 Edit the `config.yaml` file.
 
-SHIELDADMONEND
+====
 
 == Comment in a code block
 
@@ -31,29 +32,30 @@ print(status)
 .View Installation Options
 [%collapsible]
 ======
-SHIELDADMONSTARTtabs
+[tabs]
+====
 
-@tab Linux
+Linux::
 
 `sudo zypper install suse`
 
-@tab Windows
+Windows::
 
 `choco install suse`
 
-SHIELDADMONEND
+====
 ======
 
 == Mermaid Diagram (Flowchart)
 
-[source,mermaid]
-----
+[mermaid]
+....
 graph TD
 A[Start Installation] --> B{Is wifi connected?}
 B -- Yes --> C[Download Packages]
 B -- No --> D[Error: Check IP]
 C --> E[Finish Setup]
-----
+....
 
 [NOTE]
 ====
@@ -72,5 +74,5 @@ Do not turn off the power while we update the configuration.
 
 [IMPORTANT]
 ====
-This process is critical for the suse manager id.
+This process is critical for the SUSE manager id.
 ====
