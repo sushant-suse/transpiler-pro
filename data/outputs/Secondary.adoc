@@ -1,0 +1,70 @@
+= we check the wifi status now
+:revdate: 2026-03-25
+
+== Markdown Tabs
+
+SHIELDADMONSTARTtabs
+
+@tab Step 1: Initialize
+
+Run the `init` command to start.
+
+@tab Step 2: Configure
+
+Edit the `config.yaml` file.
+
+SHIELDADMONEND
+
+== Comment in a code block
+
+[source,python]
+----
+def install_suse():
+
+# it will be very easy to finish
+status = "checking"
+print(status)
+----
+
+== Tabs inside a `++<++details++>++` Block
+
+.View Installation Options
+[%collapsible]
+======
+SHIELDADMONSTARTtabs
+
+@tab Linux
+
+`sudo zypper install suse`
+
+@tab Windows
+
+`choco install suse`
+
+SHIELDADMONEND
+======
+
+== Mermaid Diagram (Flowchart)
+
+[source,mermaid]
+----
+graph TD
+A[Start Installation] --> B{Is wifi connected?}
+B -- Yes --> C[Download Packages]
+B -- No --> D[Error: Check IP]
+C --> E[Finish Setup]
+----
+
+*Note*: The system reboots automatically after this step.
+
+[NOTE]
+====
+Ensure you have backed up the data to a safe location.
+====
+
+*Important*: Do not turn off the power while we update the configuration.
+
+[IMPORTANT]
+====
+This process is critical for the suse manager id.
+====

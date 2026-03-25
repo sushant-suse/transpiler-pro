@@ -181,18 +181,24 @@ class StyleFixer:
                         if wrong_term:
                             working_line = re.sub(rf"\b{re.escape(wrong_term)}\b", suggestion, working_line, flags=re.IGNORECASE)
 
-                # 4. Spelling + Learning Discovery
+                # 4. Spelling + Learning Discovery (Surgical Anti-Virus Fix)
                 elif "Spelling" in check_id:
-                    # Prefer the suggested word if Vale provided one
-                    word_to_fix = re.findall(extract_re, msg)[0] if re.findall(extract_re, msg) else ""
-                    if word_to_fix:
-                        correct_word = suggestion if suggestion else word_to_fix.capitalize()
+                    # Only proceed if we have a real suggestion that isn't a rule name
+                    if suggestion and suggestion.lower() not in ["spelling", "spellings", "learned"]:
+                        match = re.findall(extract_re, msg)
+                        word_to_fix = match[0] if match else ""
                         
-                        working_line = re.sub(rf"\b{re.escape(word_to_fix)}\b", correct_word, working_line, flags=re.IGNORECASE)
-                        
-                        # Learn the correction if it's new
-                        if word_to_fix.lower() not in session_branding:
-                            self.kb["learned"][word_to_fix.lower()] = correct_word
+                        if word_to_fix:
+                            # Use the suggestion provided by Vale
+                            working_line = re.sub(rf"\b{re.escape(word_to_fix)}\b", suggestion, working_line)
+                            
+                            # Learn the correction for the rest of the session
+                            if word_to_fix.lower() not in session_branding:
+                                self.kb["learned"][word_to_fix.lower()] = suggestion
+                    else:
+                        # If no valid suggestion, DO NOTHING. 
+                        # Better to leave 'suse' as 'suse' than change it to 'spellings'.
+                        pass
 
                 # 5. Tense Shift
                 if "Will" in check_id:

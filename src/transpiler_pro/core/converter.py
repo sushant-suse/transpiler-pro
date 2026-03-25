@@ -179,6 +179,10 @@ class DocConverter:
     
     def convert_file(self, input_path: Path, output_path: Path) -> None:
         """Orchestrates the conversion of a single file."""
+        # SURGICAL FIX: Clear metadata from previous runs
+        self.metadata = {}
+        self.discovered_title = None
+        
         raw_md = input_path.read_text(encoding='utf-8')
         ready_md = self.pre_process_markdown(raw_md)
         
