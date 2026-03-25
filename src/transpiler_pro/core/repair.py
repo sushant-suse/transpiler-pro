@@ -38,21 +38,28 @@ class LinguisticEngine:
         tense_map = {}
         
         for token in doc:
+            # --- SURGICAL FIX: Subject-Aware Tense Shifting ---
             if token.pos_ == "AUX" and token.lemma_ == "will":
                 head = token.head
                 if head.pos_ in ["VERB", "AUX"]:
+                    # 1. Identify the subjects of the verb
                     subjects = [w for w in head.lefts if "subj" in w.dep_]
-                    # Check for You/We/I
-                    is_user = any(s.lemma_.lower() in ["you", "we", "i"] for s in subjects)
                     
-                    if is_user:
-                        # "You will check" -> "You check"
-                        replacement = head.text 
+                    # 2. Check if the subject is "User-centric" (You, We, I)
+                    is_user_subject = any(s.lemma_.lower() in ["you", "we", "i"] for s in subjects)
+                    
+                    if is_user_subject:
+                        # "You will be" -> "You are"
+                        # "You will check" -> "You check" (head.text is the base form)
+                        replacement = "are" if head.lemma_ == "be" else head.text
                     else:
-                        # "It will check" -> "It checks"
+                        # "The system will be" -> "The system is"
+                        # "The system will check" -> "The system checks"
                         replacement = self._conjugate_to_present(head)
                     
-                    tense_map[rf"(?i)\b{token.text}\s+{re.escape(head.text)}\b"] = replacement
+                    # 3. Create the mapping for the regex swap
+                    pattern = rf"(?i)\b{token.text}\s+{re.escape(head.text)}\b"
+                    tense_map[pattern] = replacement
 
         for phrase, replacement in tense_map.items():
             text = re.sub(phrase, replacement, text)

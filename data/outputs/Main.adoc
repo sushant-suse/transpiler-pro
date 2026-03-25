@@ -98,9 +98,9 @@ The user executes the script instead of the manual process. The nodes is current
 
 == Section 2: Configuration Details
 
-Check the advanced configuration for your wifi settings. We configure the ip address and the id of the device. to change the configuration, look at the xref:./setup.md[Setup Guide]. We stop the service before we reboots the node.
+Check the advanced configuration for your wifi settings. We configure the ip address and the id of the device. to change the configuration, look at the xref:setup.adoc[Setup Guide]. We stop the service before we reboots the node.
 
-For more info, see xref:./inputs/sub-folder/test2.md[Detailed Specs].
+For more info, see xref:sub-folder/test2.adoc[Detailed Specs].
 
 For more info, click imagen here: image:https://example.com/image.png[Image]
 
@@ -125,6 +125,6 @@ Nested shielded block inside a collapsible. We verify this.
 ====
 ======
 
-====== Section 6: Final Notes
+===== Section 6: Final Notes
 
 We fix the id error. It is easy to use suse.

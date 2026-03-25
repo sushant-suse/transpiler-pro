@@ -48,7 +48,7 @@ The second way to set up your user profile is to run the command `losant set-tok
 
 ==== Creating a User Token
 
-A xref:user-accounts/user-tokens.adoc[User Token] can be created in the xref:user-accounts/user-tokens.adoc#_generating_an_api_token[UI] or through the xref:rest-api/user-api-tokens.adoc#_post[API]. If you are using the UI to create a User Token, select the "CLI developer" permission option. This permission option scopes the exact permissions needed to manage only the resources that can be managed in the CLI. If you are creating a User Token with the API, set the field `scope` to `all.User.cli`.
+A xref:user-accounts/user-tokens.adoc[User Token] can be created in the xref:user-accounts/user-tokens#_generating_an_api_token[UI] or through the xref:rest-api/user-api-tokens#_post[API]. If you are using the UI to create a User Token, select the "CLI developer" permission option. This permission option scopes the exact permissions needed to manage only the resources that can be managed in the CLI. If you are creating a User Token with the API, set the field `scope` to `all.User.cli`.
 
 === Configure
 
@@ -73,4 +73,4 @@ Once you have configured the directory, you notice a few newly created directori
 * `experience/components/`: This is where all your local experience components is.
 * `experience/pages/`: This is where all your local experience pages is.
 * `experience/layouts/`: This is where all your local experience layouts is.
-* `files/`: This is where all your local files is. The Files directory matches the top-level directory on your Application's xref:applications/files.adoc#_public_files[public Files]. For example, if on Losant you have a public file at `/foo/bar/helloworld.txt`, that file is downloaded and placed at `files/foo/bar/helloworld.txt`. (xref:applications/files.adoc#_private_files[Private files] are not supported by the Losant CLI.)
+* `files/`: This is where all your local files is. The Files directory matches the top-level directory on your Application's xref:applications/files#_public_files[public Files]. For example, if on Losant you have a public file at `/foo/bar/helloworld.txt`, that file is downloaded and placed at `files/foo/bar/helloworld.txt`. (xref:applications/files#_private_files[Private files] are not supported by the Losant CLI.)

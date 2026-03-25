@@ -1,4 +1,4 @@
-= we check the wifi status now
+= Untitled Document
 :revdate: 2026-03-25
 
 == Markdown Tabs
@@ -20,7 +20,7 @@ SHIELDADMONEND
 [source,python]
 ----
 def install_suse():
-
+# we will check the wifi status now
 # it will be very easy to finish
 status = "checking"
 print(status)
@@ -55,14 +55,20 @@ B -- No --> D[Error: Check IP]
 C --> E[Finish Setup]
 ----
 
-*Note*: The system reboots automatically after this step.
+[NOTE]
+====
+The system reboots automatically after this step.
+====
 
 [NOTE]
 ====
 Ensure you have backed up the data to a safe location.
 ====
 
-*Important*: Do not turn off the power while we update the configuration.
+[IMPORTANT]
+====
+Do not turn off the power while we update the configuration.
+====
 
 [IMPORTANT]
 ====
