@@ -204,15 +204,20 @@ class StyleFixer:
                 if "Will" in check_id:
                     working_line = self._fix_tense(working_line)
 
-            # --- PHASE B: GLOBAL ENFORCEMENT PASS ---
-            # 1. Apply the automated fixes dictionary
+            # --- PHASE B: GLOBAL ENFORCEMENT PASS (WITH GUARDRAILS) ---
+            
+            # 1. Apply the automated fixes dictionary (Safely!)
             for wrong, correct in self.kb.get("automated_fixes", {}).items():
-                # Use ignorecase to catch suse, Suse, etc., and enforce the exact case from JSON
-                working_line = re.sub(rf"\b{re.escape(wrong)}\b", correct, working_line, flags=re.IGNORECASE)
+                # GUARDRAIL: Negative lookarounds (?<![\/-]) and (?![\/-]) prevent the 
+                # branding pass from touching words inside file paths, URLs, or hyphenated strings.
+                # Example: It will fix "suse" but ignore "/suse-logo.svg" or "node-suse".
+                pattern = rf"(?<![\/-])\b{re.escape(wrong)}\b(?![\/-])"
+                working_line = re.sub(pattern, correct, working_line, flags=re.IGNORECASE)
 
             # 2. Fragment Healer: Capitalize the first letter of the sentence
-            # Finds start of line or a period+space, followed by a lowercase letter
-            working_line = re.sub(r'(^|\.\s+)([a-z])', lambda m: m.group(1) + m.group(2).upper(), working_line)
+            # GUARDRAIL: Do not capitalize if the line starts with an AsciiDoc macro, attribute, or URL.
+            if not re.match(r'^(image::|video::|xref:|link:|http|\[|:)', working_line, flags=re.IGNORECASE):
+                working_line = re.sub(r'(^|\.\s+)([a-z])', lambda m: m.group(1) + m.group(2).upper(), working_line)
 
             # Save if changed
             if working_line != original_line:

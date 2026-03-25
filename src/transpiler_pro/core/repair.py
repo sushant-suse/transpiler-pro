@@ -42,31 +42,43 @@ class LinguisticEngine:
                 auxiliaries = [w.lemma_.lower() for w in token.lefts if w.dep_ in ["aux", "auxpass"]]
                 if "have" in auxiliaries:
                     continue
-                
-            # --- SURGICAL FIX: Subject-Aware Tense Shifting ---
+
+            # --- FINAL BOSS: ADVANCED SUBJECT & PLURALITY AWARENESS ---
             if token.pos_ == "AUX" and token.lemma_ == "will":
                 head = token.head
                 if head.pos_ in ["VERB", "AUX"]:
-                    # 1. Grab ALL subjects (including 'nsubjpass' for passive voice!)
-                    # This fixes the "You is prompted" bug.
-                    subjects = [w for w in head.children if "subj" in w.dep_]
                     
-                    # Also check the head's head in case of complex dependent clauses ("we reboots")
+                    # 1. Hunt down the true Subject (catches passives 'nsubjpass' and nested clauses)
+                    subjects = [w for w in head.children if "subj" in w.dep_]
                     if not subjects and head.head != head:
                         subjects = [w for w in head.head.children if "subj" in w.dep_]
-                        
-                    is_user_subject = any(s.lemma_.lower() in ["you", "we", "i"] for s in subjects)
                     
-                    # 2. Hyphenated Word Protection (Fixes "res-prompt")
+                    # 2. Determine Plurality and User-Centricity
+                    is_user = any(s.lemma_.lower() in ["you", "we", "i"] for s in subjects)
+                    is_plural = False
+                    
+                    if is_user:
+                        is_plural = True  # You/We/I always take plural verb forms (are, check, prompt)
+                    elif subjects:
+                        for s in subjects:
+                            # Catch explicit plurals ("tables", "components") or plural tags (NNS)
+                            if s.tag_ in ["NNS", "NNPS"] or "Number=Plur" in str(s.morph) or s.lemma_.lower() == "they":
+                                is_plural = True
+                                
+                    # 3. Conjugate correctly based on the findings
                     if "-" in head.text:
-                        replacement = head.text if is_user_subject else f"{head.text}s"
+                        # Protect hyphenated words from the internal conjugator ("re-prompt")
+                        replacement = head.text if is_plural else f"{head.text}s"
                     else:
-                        # 3. Base form for User, Conjugated for System
-                        if is_user_subject:
-                            replacement = "are" if head.lemma_ == "be" else head.text
+                        if head.lemma_ == "be":
+                            replacement = "are" if is_plural else "is"
+                        elif is_plural:
+                            # Base form for "You/We/I" and plural subjects (e.g., "reboot")
+                            replacement = head.text
                         else:
+                            # 3rd person singular for "It", "The system", etc. (e.g., "reboots")
                             replacement = self._conjugate_to_present(head)
-                    
+                            
                     pattern = rf"(?i)\b{token.text}\s+{re.escape(head.text)}\b"
                     tense_map[pattern] = replacement
 

@@ -26,23 +26,23 @@ Before you get started, there are a couple things you have to configure first. T
 
 After installing, one way to set up your user profile is to run the command `losant login`. This prompts you to enter your Losant account email address. If your user is *not* connected to a Single Sign-On Provider, you is prompted to enter your password, and optionally your multi-factor authentication code. *If you do not have multi-factor authentication enabled, just hit enter to skip multi-factor authentication.*
 
-Image::cli/login.png[Losant Login,title="Login"]
+image::cli/login.png[Losant Login,title="Login"]
 
 If you account is connected to a Single Sign-On Provider, you is prompted to enter a xref:#_creating_a_user_token[User Token].
 
-Image::cli/login-token.png[Losant Login Token,title="Login Token"]
+image::cli/login-token.png[Losant Login Token,title="Login Token"]
 
 Once you have successfully authenticated with our API, a file is created at `~/.losant/.credentials.yml` containing your authentication token. This token is used across all your Losant configured directories.
 
-Image::cli/login-success.png[Losant Success Login,title="Login Success"]
+image::cli/login-success.png[Losant Success Login,title="Login Success"]
 
 If authentication fails you is prompted to re-enter your email, password and multi-factor authentication.
 
-Image::cli/login-failure.png[Losant Retry Login,title="Login Retry"]
+image::cli/login-failure.png[Losant Retry Login,title="Login Retry"]
 
 === Set-Token
 
-Image::cli/set-token.png[Losant Set-Token,title="Set-Token"]
+image::cli/set-token.png[Losant Set-Token,title="Set-Token"]
 
 The second way to set up your user profile is to run the command `losant set-token [token]`. After installation, running this command prompts you to enter a xref:#_creating_a_user_token[User Token] or pass in the User Token as the command argument to avoid being prompted. The set-token command is an easy way to give a non-Losant user access to a specific application or all your applications without having to give them the full credentials to the UI.
 
@@ -56,13 +56,13 @@ After you have successfully set up your user profile, you are now ready to confi
 
 Create or go to a directory that you want to keep your Losant Application resources, then run `losant configure`. This links the current directory to one of your Losant Applications.
 
-Image::cli/configure.png[Losant Configure,title="Configure"]
+image::cli/configure.png[Losant Configure,title="Configure"]
 
 When you run this command, you is prompted to give a (or part of a) Losant Application name. If multiple Applications come back with similar names we present you with a list to choose from. If you don't find the application you are looking for, choose `none of these, search again`, and it res-prompt you for another Application name.
 
 Once you have picked the Losant Application, it will automatically try to download your Application's xref:experiences/views.adoc[Experience Views]. It will then prompt you to download your xref:applications/files.adoc[Application's Files] followed by your xref:data-tables/overview.adoc[Application's Data Tables].
 
-Image::cli/configure-success.png[Losant Configure Success,title="Configure Success"]
+image::cli/configure-success.png[Losant Configure Success,title="Configure Success"]
 
 Once you have configured the directory, you notice a few newly created directories in your configured directory.
 

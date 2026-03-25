@@ -30,7 +30,7 @@ You can find more details at https://www.suse.com[SUSE Documentation].
 
 === Network Settings
 
-Image::https://example.com/network.png[Network Diagram]
+image::https://example.com/network.png[Network Diagram]
 
 [cols="<,^,>",options="header",]
 |===
@@ -92,9 +92,9 @@ This is another blockquote often used as a note in Markdown.
 
 In this guide, we setup the environment for the user. It is important to SUSE is a easy system to manage. We check the Wi-Fi status before we start the installation.
 
-Image::/img/logos/SUSE-logo-primary.svg[SUSE Logo]
+image::/img/logos/suse-logo-primary.svg[SUSE Logo]
 
-The user executes the script instead of the manual process. The nodes is currently inactive.
+The user execute the script instead of the manual process. The nodes is currently inactive.
 
 == Section 2: Configuration Details
 
