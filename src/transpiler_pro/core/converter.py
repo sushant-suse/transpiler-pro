@@ -1,8 +1,14 @@
 """
 Location: src/transpiler_pro/core/converter.py
+Description: The Structural Transformation Engine (X-Phase).
 
-Description: Core Transformation Engine for Transpiler-Pro.
-Final Version: Integrated Title Scavenging, Video Integrity, and List Spacing.
+This module orchestrates the conversion of Markdown (MD/MDX) into AsciiDoc (ADOC).
+It uses a "Shield-Pandoc-Restore" sandwich architecture:
+1. Pre-processing: Shielding complex Markdown (Tabs, Collapsibles, Videos) so 
+   Pandoc doesn't mangle them.
+2. Pandoc: Performing the baseline structural conversion.
+3. Post-processing: Restoring shielded blocks, promoting admonitions, and 
+   standardizing Antora-compatible cross-references and headers.
 """
 
 import re
@@ -14,20 +20,24 @@ from typing import Match, Optional, Dict, Any
 
 class DocConverter:
     """
-    A data-driven transformation engine driven by configuration patterns.
+    A pattern-driven engine that transforms Markdown into Enterprise AsciiDoc.
+    
+    Attributes:
+        config (Dict): Configuration extracted from pyproject.toml.
+        metadata (Dict): Extracted frontmatter (YAML) from the source file.
+        discovered_title (str): The inferred document title (H1 or YAML).
     """
 
     def __init__(self, config_path: Optional[Path] = None):
-        """Initializes the converter with settings from the provided config path."""
+        """Initializes the converter and loads conversion patterns."""
         self.config_path = config_path or Path("pyproject.toml")
         self.config = self._load_project_config()
         self.conv_cfg = self.config.get("conversions", {})
-        # Dynamic metadata storage to capture ALL frontmatter keys
         self.metadata: Dict[str, Any] = {}
-        self.discovered_title: Optional[str] = None
+        self.discovered_title = None
 
     def _load_project_config(self) -> Dict[str, Any]:
-        """Loads the configuration block from the TOML file."""
+        """Loads the [tool.transpiler-pro] configuration block."""
         if not self.config_path.exists():
             return {}
         try:
@@ -39,11 +49,25 @@ class DocConverter:
 
     def pre_process_markdown(self, content: str) -> str:
         """
-        Shields Markdown blocks and extracts metadata for the header.
+        Prepares Markdown for Pandoc by shielding modern syntax and extracting metadata.
+
+        Args:
+            content (str): Raw Markdown string.
+
+        Returns:
+            str: "Shielded" Markdown ready for Pandoc.
         """
-        # --- 1. SOPHISTICATED FRONTMATTER EXTRACTION ---
+        self.metadata = {}
+        self.discovered_title = None
+
+        # --- 1. CODE BLOCK SHIELDING ---
+        # We protect '#' characters inside code blocks so the Title Scavenger 
+        # doesn't accidentally treat a code comment as the document's H1 title.
+        content = re.sub(r'(`{3}.*?`{3})', lambda m: m.group(1).replace('#', 'HASHSHIELD'), content, flags=re.DOTALL)
+
+        # --- 2. FRONTMATTER EXTRACTION ---
+        # Extracts YAML metadata (title, description, etc.) from the top of the MD file.
         frontmatter_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
-        
         if frontmatter_match:
             try:
                 yaml_data = yaml.safe_load(frontmatter_match.group(1))
@@ -53,18 +77,22 @@ class DocConverter:
             except Exception:
                 self.metadata = {}
 
-        # --- 2. TITLE SCAVENGER (CRITICAL FIX) ---
-        # Capture the H1 while it's still Markdown (#) to prevent "H2 Hijacking"
+        # --- 3. TITLE SCAVENGER ---
+        # Logic: Priority 1 is YAML 'title'. Priority 2 is the first H1 (#) found.
         self.discovered_title = self.metadata.get('title')
         if not self.discovered_title:
             h1_match = re.search(r'^#\s+(.*)$', content, re.M)
             if h1_match:
                 self.discovered_title = h1_match.group(1).strip()
-                # Remove from body so it's not duplicated below the header
+                # Remove the H1 from body as it will be promoted to the AsciiDoc Document Title (=).
                 content = content.replace(h1_match.group(0), "", 1)
 
-        # --- 3. VIDEO IFRAME SHIELDING ---
-        # Use alphanumeric tokens to prevent Pandoc from injecting '++' passthroughs
+        # Restore shielded hashes after title scavenging is safe.
+        content = content.replace('HASHSHIELD', '#')
+
+        # --- 4. VIDEO & COMPLEX PATTERN SHIELDING ---
+        # Replaces complex HTML/Markdown blocks with tokens that Pandoc will ignore.
+        # This protects <iframe> embeds and custom ':::tabs' blocks.
         content = re.sub(r'<iframe.*?embed/([^"?\s]+).*?</iframe>', r'VIDEOTOKEN\1', content)
 
         patterns = self.conv_cfg.get("shielding_patterns", [])
@@ -73,6 +101,7 @@ class DocConverter:
             replacement = p.get("replacement")
             
             if p.get("hook") == "protect_spaces":
+                # Special hook for collapsibles to ensure spaces in titles aren't lost.
                 def protect_hook(match: Match) -> str:
                     title = match.group(1).strip().replace(' ', 'PROTECTSPACE')
                     body = match.group(2).strip()
@@ -85,14 +114,24 @@ class DocConverter:
 
     def post_process_asciidoc(self, content: str) -> str:
         """
-        Restores markers and constructs the finalized AsciiDoc header.
+        Finalizes the AsciiDoc output after Pandoc has finished.
+
+        This involves:
+        1. Restoring shielded blocks (Videos, Tabs, Collapsibles).
+        2. Promoting Markdown-style notes to AsciiDoc Admonition blocks.
+        3. Normalizing cross-references (xrefs) for the Antora site generator.
+        4. Constructing the standard AsciiDoc Header.
         """
-        # --- 1. MARKER RESTORATION (VIDEO & CLEANUP) ---
+        # --- 1. HEADING NORMALIZATION ---
+        # Ensure heading levels are consistent (capping at level 5).
+        content = re.sub(r'^={6,}\s+', r'===== ', content, flags=re.M)
+
+        # --- 2. MARKER RESTORATION ---
         content = re.sub(r'VIDEOTOKEN([a-zA-Z0-9_-]+)', r'video::\1[youtube]', content)
-        
-        # ASCII De-smarting
+        # Standardize smart quotes and ellipses
         content = content.replace('’', "'").replace('‘', "'").replace('“', '"').replace('”', '"').replace('…', '...')
 
+        # Apply cleanup regex from pyproject.toml
         cleanup = self.conv_cfg.get("cleanup_regex", [])
         for c in cleanup:
             flags = re.M if c.get("flags") == "M" else 0
@@ -108,15 +147,16 @@ class DocConverter:
             else:
                 content = re.sub(regex, replacement, content, flags=flags)
 
-        # --- 2. ADMONITION PROMOTION (Aggressive Case-Insensitive) ---
+        # --- 3. ADMONITION PROMOTION ---
+        # Converts phrases like "Note: content" or "*Warning:* content" into [NOTE] blocks.
         def promote_admo(match: Match) -> str:
             label = match.group(1).upper()
             body = match.group(2).strip()
             return f"[{label}]\n====\n{body}\n===="
         
-        content = re.sub(r'(?i)^\*?(Note|Warning|Tip|Caution|Important|IMPORTANT)[:]?\*?\s+(.*)$', promote_admo, content, flags=re.M)
+        content = re.sub(r'(?i)^\*?(Note|Warning|Tip|Caution|Important|IMPORTANT)[:]?\*?[:]?\s+(.*)$', promote_admo, content, flags=re.M)
 
-        # --- 3. DYNAMIC MARKER RESTORATION ---
+        # --- 4. DYNAMIC MARKER RESTORATION ---
         restorations = self.conv_cfg.get("restoration_patterns", [])
         for r in restorations:
             regex, replacement = r.get("regex"), r.get("replacement")
@@ -136,56 +176,78 @@ class DocConverter:
                 else:
                     content = re.sub(regex, replacement, content, flags=re.S)
 
-        # --- 4. LIST STITCHING (FIXES SQUASHED/DETACHED LISTS) ---
-        # Remove excess newlines between parent (*) and child (**) items
-        content = re.sub(r'(\n\s*\*.*)\n+(\s*\*\*)', r'\1\n\2', content)
-
-        # --- 5. ANTORA XREFS & IMAGE PATHS ---
+        # --- 5. ANTORA NORMALIZATION (Links & Images) ---
+        # Clean image paths (stripping the /images/ prefix used in Markdown)
         content = re.sub(r'image::/images/(.*?)\[', r'image::\1[', content)
         
         def antora_xref_logic(match: Match) -> str:
-            raw_path, anchor = match.group(1), match.group(2)
-            path = raw_path.strip("/") if raw_path else ""
-            if path and not path.endswith(".adoc"):
+            """Converts Markdown links into Antora-compatible xrefs."""
+            raw_path = match.group(1) or ""
+            anchor = match.group(2) or ""
+            
+            # Clean and normalize path: remove extensions and 'inputs/' folder noise
+            path = raw_path.replace(".md", "").replace(".adoc", "").replace("./", "").strip("/")
+            if "inputs/" in path:
+                path = path.split("inputs/")[-1]
+            
+            if path:
                 path = f"{path}.adoc"
+                
+            # Normalize anchors to AsciiDoc style (lowercase with underscores)
             cl_anchor = ""
             if anchor:
                 cl_anchor = "#_" + anchor.replace("#", "").lower().replace("-", "_")
             return f"xref:{path}{cl_anchor}"
 
-        # Handles standard link: and removes residual ++ passthroughs
-        content = re.sub(r'link:(?:\+\+)?(/[^\[\s#\+]+)?(#[^\[\s\+]+)?(?:\+\+)?', antora_xref_logic, content)
+        # Matches Markdown link syntax and Pandoc-converted AsciiDoc links
+        content = re.sub(r'(?:link:|xref:)(?:\+\+)?([^\[\s#\+]+)?(#[^\[\s\+]+)?(?:\+\+)?', antora_xref_logic, content)
 
         # --- 6. FINAL HEADER CONSTRUCTION ---
         today = datetime.now().strftime("%Y-%m-%d")
         header_lines = [f"= {self.discovered_title or 'Untitled Document'}"]
         
+        # Inject YAML metadata as AsciiDoc attributes
         for key, value in self.metadata.items():
-            if key.lower() != "title": # Discovered title is already in L0 position
+            if key.lower() != "title":
                 header_lines.append(f":{key}: {value}")
         
         header_lines.append(f":revdate: {today}")
         
+        # Add global Antora headers from pyproject.toml
         antora_cfg = self.config.get("antora", {})
         header_lines.extend(antora_cfg.get("headers", []))
         
         header_block = "\n".join(header_lines) + "\n\n"
         
-        # Section Promotion (Cleanup)
-        content = re.sub(r"^(Section \d+:.*)$", r"= \1", content, flags=re.M)
-        content = content.replace("PROTECTSPACE", " ").replace("SHIELDSEP", "\n")
-        
+        # --- 7. CLEANUP & EXTENSION CONVERSION ---
+        # Final cleanup for Mermaid diagrams and Tab syntax
+        content = re.sub(r'\[source,mermaid\]\n----(.*?)----', r'[mermaid]\n....\1....', content, flags=re.DOTALL)
+        content = content.replace("SHIELDADMONSTARTtabs", "[tabs]\n====")
+        content = content.replace("SHIELDADMONEND", "====")
+        content = re.sub(r'^@tab\s+(.*)$', r'\1::', content, flags=re.M)
+
         return header_block + content.strip()
     
     def convert_file(self, input_path: Path, output_path: Path) -> None:
-        """Orchestrates the conversion of a single file."""
+        """
+        Orchestrates the conversion of a single Markdown file to AsciiDoc.
+        
+        Args:
+            input_path (Path): Source Markdown file.
+            output_path (Path): Destination for the raw AsciiDoc.
+        """
+        self.metadata = {}
+        self.discovered_title = None
+        
         raw_md = input_path.read_text(encoding='utf-8')
         ready_md = self.pre_process_markdown(raw_md)
         
+        # We write to a temporary file so Pandoc sees the 'shielded' version
         temp_md = input_path.with_suffix('.tmp.md')
         temp_md.write_text(ready_md, encoding='utf-8')
         
         try:
+            # Execute Pandoc CLI
             subprocess.run(
                 [
                     "pandoc", 
@@ -200,8 +262,10 @@ class DocConverter:
                 capture_output=True
             )
             
+            # Post-process the Pandoc result to restore shields and finalize headers
             final_adoc = self.post_process_asciidoc(output_path.read_text(encoding='utf-8'))
             output_path.write_text(final_adoc, encoding='utf-8')
         finally:
+            # Tidy up transient files
             if temp_md.exists(): 
                 temp_md.unlink()

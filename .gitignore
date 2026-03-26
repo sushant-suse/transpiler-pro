@@ -9,10 +9,10 @@ venv/
 .pytest_cache/
 
 # --- Project Specific Data ---
-data/inputs/*
-data/outputs/*
+# data/inputs/*
+# data/outputs/*
 data/intermediate/*
-data/logs/old/*
+data/logs/*
 !data/outputs/.gitkeep
 
 # --- Tracking the Brain ---

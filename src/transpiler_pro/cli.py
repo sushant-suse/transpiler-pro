@@ -1,7 +1,15 @@
 """
 Location: src/transpiler_pro/cli.py
-Description: Orchestration Layer for Transpiler-Pro.
-Fixed: Dangerous 'reset --hard' removed from sync; Recursion logic fixed for subfolders.
+Description: The Orchestration Layer for Transpiler-Pro.
+
+This module provides the Command Line Interface (CLI) using the Typer framework.
+It manages the three primary phases of the documentation pipeline:
+1. Sync: Updating the SUSE style rules.
+2. X-Phase: Structural conversion (Markdown -> AsciiDoc).
+3. Y-Phase: Linguistic repair and style validation (NLP & Vale).
+
+The CLI ensures that directory structures are mirrored exactly from the 
+'data/inputs' folder to 'data/outputs', supporting nested subfolders.
 """
 
 import tomllib
@@ -13,38 +21,56 @@ from typing import Any, Dict, Optional, List
 import typer
 from rich.console import Console
 
+# Core logic imports
 from transpiler_pro.core.converter import DocConverter
 from transpiler_pro.core.fixer import StyleFixer
 from transpiler_pro.core.linter import StyleLinter
 from transpiler_pro.core.repair import LinguisticEngine
+
+# Utility and Pathing imports
 from transpiler_pro.utils.logger import AuditLogger
 from transpiler_pro.utils.paths import INPUT_DIR, INTERMEDIATE_DIR, OUTPUT_DIR, STYLES_DIR
 
+# Initialize Typer app and Rich console for styled terminal output
 app = typer.Typer(
     name="transpiler-pro",
-    help="Enterprise Documentation Pipeline with X (Convert) and Y (Repair) commands.",
+    help="Enterprise Documentation Pipeline with X (Convert) and Y (Repair) phases.",
     no_args_is_help=True, 
     add_completion=False
 )
 console = Console()
 
+# Default configuration source
 DEFAULT_CONFIG = Path("pyproject.toml")
 
 def load_config(config_path: Path) -> Dict[str, Any]:
-    """Loads global pipeline settings."""
+    """
+    Loads pipeline settings from the project's pyproject.toml file.
+
+    Args:
+        config_path (Path): Path to the TOML configuration file.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing the [tool.transpiler-pro] settings.
+    """
     if not config_path.exists():
         return {}
     try:
         with open(config_path, "rb") as f:
+            # We look specifically for the tool.transpiler-pro namespace
             return tomllib.load(f).get("tool", {}).get("transpiler-pro", {})
-    except Exception:
+    except Exception as e:
+        console.print(f"[bold red]Error loading config:[/] {e}")
         return {}
 
 @app.command(name="sync")
 def sync_styles(config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")) -> None:
     """
-    Synchronizes the SUSE Style Guide repository safely.
-    Removed 'reset --hard' to prevent accidental deletion of user code.
+    Synchronizes the local SUSE Style Guide repository with the official remote.
+
+    This ensures the Vale linter uses the latest SUSE-approved linguistic rules.
+    It performs a 'git pull' safely without forcing a hard reset to protect 
+    local environment integrity.
     """
     pipeline_config = load_config(Path(config))
     repo_url = pipeline_config.get("pipeline", {}).get(
@@ -61,7 +87,7 @@ def sync_styles(config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c"
             subprocess.run(["git", "clone", repo_url, str(target_dir)], check=True, capture_output=True)
         else:
             console.print("  [yellow]➜[/] Pulling latest changes safely...")
-            # We use pull without reset. This only updates the styles/ folder content.
+            # master branch is used for the official openSUSE/SUSE style guide
             subprocess.run(["git", "-C", str(target_dir), "pull", "origin", "master"], check=True, capture_output=True)
             
         console.print("  [bold green]✓[/] Style guide updated.")
@@ -70,10 +96,19 @@ def sync_styles(config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c"
 
 @app.command(name="x-convert")
 def convert_x(
-    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific MD file"),
+    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific MD file within inputs/"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
-    """COMMAND X: Converts Markdown files to raw AsciiDoc with recursive directory mirroring."""
+    """
+    COMMAND X: Performs structural conversion of Markdown to AsciiDoc.
+
+    It scans the 'data/inputs' directory recursively, processes all supported 
+    extensions (.md, .mdx), and outputs raw .adoc files into 'data/intermediate'.
+    
+    Key Features:
+    - Mirrors nested directory structures.
+    - Handles shielding of tabs and collapsible blocks.
+    """
     config_path = Path(config)
     pipeline_config = load_config(config_path)
     converter = DocConverter(config_path=config_path)
@@ -81,13 +116,14 @@ def convert_x(
     target_files: List[Path] = []
     exts = pipeline_config.get("pipeline", {}).get("supported_extensions", [".md", ".mdx"])
 
+    # File selection logic: Specific file vs. Entire Directory
     if file_name:
         path_obj = Path(file_name)
         input_file = path_obj if path_obj.is_absolute() else INPUT_DIR / file_name
         if input_file.exists():
             target_files = [input_file]
     else:
-        # RECURSIVE FIX: Find all files matching extensions across all subfolders
+        # Search all subdirectories for supported extensions
         for ext in exts:
             target_files.extend(list(INPUT_DIR.rglob(f"*{ext}")))
 
@@ -96,9 +132,11 @@ def convert_x(
         return
 
     for md_path in target_files:
+        # Calculate the relative path to preserve subfolder hierarchy
         rel_path = md_path.relative_to(INPUT_DIR)
         inter_path = INTERMEDIATE_DIR / rel_path.with_suffix(".adoc")
         
+        # Ensure the destination subfolder exists
         inter_path.parent.mkdir(parents=True, exist_ok=True)
         
         console.print(f"[bold blue]X-Phase:[/] [cyan]{rel_path}[/] -> [yellow]{inter_path.name}[/]")
@@ -106,11 +144,18 @@ def convert_x(
 
 @app.command(name="y-repair")
 def repair_y(
-    file_name: Optional[str] = typer.Option(None, "--file", "-f"),
-    fix: bool = typer.Option(True, "--fix/--no-fix"),
+    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific ADOC file within intermediate/"),
+    fix: bool = typer.Option(True, "--fix/--no-fix", help="Enable/Disable automated linguistic healing"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
-    """COMMAND Y: Validates and repairs AsciiDoc files with recursive directory mirroring."""
+    """
+    COMMAND Y: Validates and repairs AsciiDoc files linguistically.
+
+    This phase applies:
+    1. Linguistic Engine: Tense shifting and grammar correction via spaCy.
+    2. Style Fixer: Resolves Vale linter violations and branding errors.
+    3. Audit Logging: Records any remaining issues that require manual review.
+    """
     config_path = Path(config)
     pipeline_config = load_config(config_path)
     
@@ -118,6 +163,7 @@ def repair_y(
     audit_logger = AuditLogger()
     fixer = StyleFixer(config_path=config_path)
 
+    # Determine which files to process from the intermediate directory
     if file_name:
         path_obj = Path(file_name)
         input_file = path_obj if path_obj.is_absolute() else INTERMEDIATE_DIR / file_name
@@ -129,6 +175,7 @@ def repair_y(
         rel_path = inter_path.relative_to(INTERMEDIATE_DIR)
         final_path = OUTPUT_DIR / rel_path
         
+        # Mirror structure to final output directory
         final_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(inter_path, final_path)
         
@@ -137,24 +184,30 @@ def repair_y(
         linter = StyleLinter(final_path, config_path=config_path)
         linter.setup_config()
         
+        # First Pass: Identify violations
         initial_findings = linter.run()
         linter.display_report(initial_findings)
         
         if fix and initial_findings:
+            # Linguistic Engine: Fix grammar/tense shifting
             content = final_path.read_text(encoding="utf-8")
             healed = repair_engine.repair_text(content)
             final_path.write_text(healed, encoding="utf-8")
             
+            # Style Fixer: Fix spelling, branding, and linter-specific suggestions
             file_key = str(final_path.resolve())
             fixer.fix_file(final_path, initial_findings.get(file_key, []))
 
+            # Second Pass: Verification and Audit Logging
             final_findings = linter.run()
             residual_violations = final_findings.get(file_key, [])
             
+            # Reporting Stats
             initial_count = len(initial_findings.get(file_key, []))
             residual_count = len(residual_violations)
             fixed_count = initial_count - residual_count
             
+            # Log any issues the machine couldn't fix for the human editor
             for v in residual_violations:
                 audit_logger.log_issue(
                     file_path=str(final_path),
@@ -176,20 +229,29 @@ def execute_full_pipeline(
     sync: bool = typer.Option(True, "--sync/--no-sync", help="Pull latest styles before running"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
-    """THE COMBO COMMAND: Syncs, Converts, and Repairs while maintaining folder structure."""
+    """
+    THE COMBO COMMAND: Syncs, Converts, and Repairs in one atomic operation.
+    
+    This is the recommended command for production use. It handles the entire
+    lifecycle of a document, maintaining folder structures and ensuring the 
+    highest linguistic quality.
+    """
     if sync:
         sync_styles(config=config)
     
+    # Run structural conversion
     convert_x(file_name=file_name, config=config)
     
+    # Map input filename (MD) to expected intermediate filename (ADOC) for Command Y
     adoc_target = None
     if file_name:
-        # Map input filename to expected adoc filename for the repair phase
         adoc_target = str(Path(file_name).with_suffix(".adoc"))
         
+    # Run linguistic repair
     repair_y(file_name=adoc_target, fix=True, config=config)
 
 def main():
+    """Main entry point for the CLI."""
     app()
 
 if __name__ == "__main__":
