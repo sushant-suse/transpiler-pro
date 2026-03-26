@@ -48,9 +48,11 @@ jobs:
 
       - name: Security Audit
         run: |
-          # We use --local to audit the current environment 
-          # We keep the skips for the non-PyPI packages
-          uv run pip-audit --local --skip en-core-web-sm --skip transpiler-pro
+          # 1. We use --local to audit the installed site-packages
+          # 2. We use --skip-editable to ignore the local transpiler-pro project
+          # 3. We use || true ONLY if you want to see the report without failing, 
+          #    but for a Quality Gate, we keep it strict.
+          uv run pip-audit --local --skip-editable
 
       - name: Run Tests with Coverage
         run: |
