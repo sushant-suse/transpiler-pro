@@ -3,7 +3,7 @@ name = "transpiler-pro"
 version = "1.0.0"
 description = "Enterprise MD-to-ADOC conversion pipeline with SUSE learning engine"
 readme = "README.md"
-requires-python = "==3.12.*"
+requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [{name = "Sushant Gaurav", email = "sushant-gaurav@suse.com"}]
 keywords = ["documentation", "asciidoc", "markdown", "nlp", "vale", "suse"]

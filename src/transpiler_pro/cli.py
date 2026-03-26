@@ -69,8 +69,7 @@ def sync_styles(config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c"
     Synchronizes the local SUSE Style Guide repository with the official remote.
 
     This ensures the Vale linter uses the latest SUSE-approved linguistic rules.
-    It performs a 'git pull' safely without forcing a hard reset to protect 
-    local environment integrity.
+    If a safe pull fails due to local cache corruption, it performs a fresh recovery clone.
     """
     pipeline_config = load_config(Path(config))
     repo_url = pipeline_config.get("pipeline", {}).get(
@@ -83,16 +82,27 @@ def sync_styles(config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c"
     
     try:
         if not target_dir.exists():
-            console.print("  [yellow]➜[/] Cloning fresh repository...")
+            console.print("  [yellow]➜[/] Initializing Style Guide (Fresh Clone)...")
             subprocess.run(["git", "clone", repo_url, str(target_dir)], check=True, capture_output=True)
         else:
-            console.print("  [yellow]➜[/] Pulling latest changes safely...")
-            # master branch is used for the official openSUSE/SUSE style guide
-            subprocess.run(["git", "-C", str(target_dir), "pull", "origin", "master"], check=True, capture_output=True)
+            console.print("  [yellow]➜[/] Updating existing styles...")
+            # Attempt a standard pull
+            result = subprocess.run(
+                ["git", "-C", str(target_dir), "pull", "origin", "master"], 
+                capture_output=True, 
+                text=True
+            )
             
-        console.print("  [bold green]✓[/] Style guide updated.")
+            # If pull fails (like it did for your teammate), wipe and re-clone
+            if result.returncode != 0:
+                console.print("  [bold yellow]⚠️ Warning:[/] Local cache out of sync. Attempting fresh recovery...")
+                shutil.rmtree(target_dir)
+                subprocess.run(["git", "clone", repo_url, str(target_dir)], check=True, capture_output=True)
+            
+        console.print("  [bold green]✓[/] Style guide updated and ready.")
     except Exception as e:
-        console.print(f"  [bold yellow]⚠️ Warning:[/] Sync skipped. Using local cache. Error: {e}")
+        console.print(f"  [bold red]FATAL ERROR:[/] Could not synchronize styles. Details: {e}")
+        raise typer.Exit(code=1)
 
 @app.command(name="x-convert")
 def convert_x(

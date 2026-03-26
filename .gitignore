@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 .venv/
 venv/
-.python-version
+# .python-version
 .ruff_cache/
 .pytest_cache/
 
