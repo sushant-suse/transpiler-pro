@@ -172,22 +172,22 @@ class StyleLinter:
         linter_cfg = self.config.get("linter", {})
         theme = linter_cfg.get("theme", {"error": "red", "warning": "yellow", "suggestion": "blue"})
 
-        table = Table(title="Style Guide Validation Report", title_style="bold cyan")
-        table.add_column("Line", style="magenta", justify="right")
-        table.add_column("Severity", style="bold")
-        table.add_column("Message", style="white")
-        table.add_column("Rule ID", style="yellow")
+        # table = Table(title="Style Guide Validation Report", title_style="bold cyan")
+        # table.add_column("Line", style="magenta", justify="right")
+        # table.add_column("Severity", style="bold")
+        # table.add_column("Message", style="white")
+        # table.add_column("Rule ID", style="yellow")
 
-        for _, issues in data.items():
-            for issue in issues:
-                sev = issue['Severity']
-                color = theme.get(sev.lower(), "white")
+        # for _, issues in data.items():
+        #     for issue in issues:
+        #         sev = issue['Severity']
+        #         color = theme.get(sev.lower(), "white")
                 
-                table.add_row(
-                    str(issue['Line']),
-                    f"[{color}]{sev}[/]",
-                    issue['Message'],
-                    issue['Check']
-                )
+        #         table.add_row(
+        #             str(issue['Line']),
+        #             f"[{color}]{sev}[/]",
+        #             issue['Message'],
+        #             issue['Check']
+        #         )
 
-        console.print(table)
+        # console.print(table)

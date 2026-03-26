@@ -59,7 +59,7 @@ C --> E[Finish Setup]
 
 [NOTE]
 ====
-The system reboot automatically after this step.
+The system reboots automatically after this step.
 ====
 
 [NOTE]

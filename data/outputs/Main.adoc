@@ -63,12 +63,12 @@ def check_status():
 .Click here for secrets
 [%collapsible]
 ======
-The password will be prompted by the terminal.
+The password is prompted by the terminal.
 ======
 
 [NOTE]
 ====
-It will be developed by the communiti. It is a note block.
+It is developed by the communiti. It is a note block.
 ====
 
 [TIP]
@@ -94,7 +94,7 @@ In this guide, we setup the environment for the user. It is important to SUSE is
 
 image::/img/logos/suse-logo-primary.svg[SUSE Logo]
 
-The user execute the script instead of the manual process. The nodes is currently inactive.
+The user executes the script instead of the manual process. The nodes is currently inactive.
 
 == Section 2: Configuration Details
 

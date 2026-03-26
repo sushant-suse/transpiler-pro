@@ -55,49 +55,51 @@ class LinguisticEngine:
                 if "have" in auxiliaries:
                     continue
 
-            # --- FINAL BOSS: ADVANCED SUBJECT & PLURALITY AWARENESS ---
+            # --- FINAL BOSS: SIMPLIFIED SUBJECT & TENSE SHIFTER ---
             if token.pos_ == "AUX" and token.lemma_ == "will":
-                head = token.head
                 
-                # 1. Broaden POS check: spaCy sometimes mis-tags verbs as NOUNs or ADJs after 'will'
-                if head.pos_ in ["VERB", "AUX", "NOUN", "ADJ"]:
-                    
-                    # 2. Hunt down the true Subject via dependency tree
-                    subjects = [w for w in head.children if "subj" in w.dep_]
-                    
-                    # 3. PROXIMITY FALLBACK: If tree fails (e.g., "we will reboot")
-                    if not subjects and token.i > 0:
-                        prev_word = doc[token.i - 1]
-                        if prev_word.pos_ in ["PRON", "NOUN", "PROPN", "X"]:
-                            subjects = [prev_word]
-                    
-                    # 4. Determine Plurality (Bypassing the -PRON- lemma trap)
-                    is_plural = False
-                    for s in subjects:
-                        t = s.text.lower()
-                        # Check exact text for user pronouns and 'they'
-                        if t in ["you", "we", "i", "they"]:
-                            is_plural = True
-                        # Check spaCy plural tags
-                        elif s.tag_ in ["NNS", "NNPS"] or "Number=Plur" in str(s.morph):
-                            is_plural = True
-                        # Failsafe: If it ends in 's' but isn't a known singular exception
-                        elif t.endswith('s') and t not in ["status", "process", "this", "us", "analysis", "is", "address", "class"]:
-                            is_plural = True
-                                
-                    # 5. Conjugate safely
-                    if "-" in head.text:
-                        replacement = head.text if is_plural else f"{head.text}s"
-                    else:
-                        if head.lemma_ == "be":
-                            replacement = "are" if is_plural else "is"
+                # Look ahead to see if the next word is "be" (Passive Voice or Progressive)
+                next_token = doc[token.i + 1] if token.i + 1 < len(doc) else None
+                is_passive_or_progressive = next_token and next_token.lemma_ == "be"
+                
+                # Determine the true subject by looking backwards in the sentence
+                # This bypasses spaCy's complex dependency tree failures
+                subject_token = None
+                for j in range(token.i - 1, -1, -1):
+                    if doc[j].pos_ in ["PRON", "NOUN", "PROPN"]:
+                        subject_token = doc[j]
+                        break
+                
+                # Determine Plurality based on the subject we found
+                is_plural = False
+                if subject_token:
+                    t = subject_token.text.lower()
+                    if t in ["you", "we", "i", "they"]:
+                        is_plural = True
+                    elif subject_token.tag_ in ["NNS", "NNPS"] or "Number=Plur" in str(subject_token.morph):
+                        is_plural = True
+                    elif t.endswith('s') and t not in ["status", "process", "this", "us", "analysis", "address", "class"]:
+                        is_plural = True
+
+                # SCENARIO A: "will be" -> "is/are"
+                if is_passive_or_progressive:
+                    replacement = "are" if is_plural else "is"
+                    pattern = rf"(?i)\b{token.text}\s+{re.escape(next_token.text)}\b"
+                    tense_map[pattern] = replacement
+
+                # SCENARIO B: "will [verb]" -> "[verb]s"
+                else:
+                    head = token.head
+                    if head.pos_ in ["VERB", "AUX", "NOUN", "ADJ"] and head != token:
+                        if "-" in head.text:
+                            replacement = head.text if is_plural else f"{head.text}s"
                         elif is_plural:
                             replacement = head.text
                         else:
                             replacement = self._conjugate_to_present(head)
                             
-                    pattern = rf"(?i)\b{token.text}\s+{re.escape(head.text)}\b"
-                    tense_map[pattern] = replacement
+                        pattern = rf"(?i)\b{token.text}\s+{re.escape(head.text)}\b"
+                        tense_map[pattern] = replacement
 
         for phrase, replacement in tense_map.items():
             text = re.sub(phrase, replacement, text)
