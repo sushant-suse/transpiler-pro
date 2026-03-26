@@ -26,7 +26,7 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install Dependencies
+      - name: Install System & PyPI Dependencies
         run: |
           set -euo pipefail
 
@@ -40,22 +40,32 @@ jobs:
           sudo install -m 0755 ./vale /usr/local/bin/vale
           vale --version
 
-          # 2. 'uv sync' handles environment and dependencies
+          # 2. 'uv sync' handles environment and PyPI-indexed dependencies
+          # We do this BEFORE the audit so we have a clean environment to scan.
           uv sync --group dev
-
-          # 3. Download the specific spaCy model
-          uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
       - name: Security Audit
         run: |
-          # 1. We use --local to audit the installed site-packages
-          # 2. We use --skip-editable to ignore the local transpiler-pro project
-          # 3. We use || true ONLY if you want to see the report without failing, 
-          #    but for a Quality Gate, we keep it strict.
-          uv run pip-audit --local --skip-editable
+          # --- AUDIT STRATEGY ---
+          # 1. We use --local to scan the site-packages installed by 'uv sync'.
+          # 2. We use --skip-editable to ignore the local 'transpiler-pro' project folder.
+          # 3. We ignore CVE-2026-4539 (Pygments) because no fix version is currently 
+          #    available on PyPI (as of March 2026). This keeps the gate strict for 
+          #    all other packages (like 'requests').
+          uv run pip-audit --local --skip-editable --ignore-vuln CVE-2026-4539
+
+      - name: Install NLP Model & Project
+        run: |
+          # Install the non-PyPI dependencies AFTER the audit.
+          # This prevents "Dependency not found on PyPI" warnings from crashing the gate.
+          uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+          
+          # Install the project in editable mode for testing
+          uv pip install -e .
 
       - name: Run Tests with Coverage
         run: |
+          # Execute pytest and capture output for the PR comment
           uv run pytest --cov=src --cov-report=term-missing | tee coverage_report.txt
 
       - name: Prepare Coverage Comment
