@@ -48,7 +48,9 @@ jobs:
 
       - name: Security Audit
         run: |
-          uv run pip-audit --skip en-core-web-sm --skip transpiler-pro
+          # We use --local to audit the current environment 
+          # We keep the skips for the non-PyPI packages
+          uv run pip-audit --local --skip en-core-web-sm --skip transpiler-pro
 
       - name: Run Tests with Coverage
         run: |
