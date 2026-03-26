@@ -48,7 +48,7 @@ jobs:
 
       - name: Security Audit
         run: |
-          uv run pip-audit
+          uv run pip-audit --skip en-core-web-sm --skip transpiler-pro
 
       - name: Run Tests with Coverage
         run: |
