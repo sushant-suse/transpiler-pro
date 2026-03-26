@@ -98,7 +98,7 @@ The user executes the script instead of the manual process. The nodes is current
 
 == Section 2: Configuration Details
 
-Check the advanced configuration for your Wi-Fi settings. We configure the IP address and the id of the device. To change the configuration, look at the xref:setup.adoc[Setup Guide]. We stop the service before we reboots the node.
+Check the advanced configuration for your Wi-Fi settings. We configure the IP address and the id of the device. To change the configuration, look at the xref:setup.adoc[Setup Guide]. We stop the service before we reboot the node.
 
 For more info, see xref:sub-folder/test2.adoc[Detailed Specs].
 
