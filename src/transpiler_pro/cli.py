@@ -26,6 +26,7 @@ from transpiler_pro.core.converter import DocConverter
 from transpiler_pro.core.fixer import StyleFixer
 from transpiler_pro.core.linter import StyleLinter
 from transpiler_pro.core.repair import LinguisticEngine
+from transpiler_pro.core.validator import ParityValidator
 
 # Utility and Pathing imports
 from transpiler_pro.utils.logger import AuditLogger
@@ -270,6 +271,7 @@ def execute_full_pipeline(
     input_path: Path = typer.Option(INPUT_DIR, "--input", "-i", help="Custom path to find source Markdown files"),
     output_path: Path = typer.Option(OUTPUT_DIR, "--output", "-o", help="Custom path to store final healed AsciiDoc files"),
     sync: bool = typer.Option(True, "--sync/--no-sync", help="Pull latest styles before running"),
+    audit: bool = typer.Option(True, "--audit/--no-audit", help="Automatically run parity check after repair"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
     """
@@ -314,6 +316,42 @@ def execute_full_pipeline(
         fix=True, 
         config=config
     )
+
+    # 4. Final Audit
+    # Automatically verify that no content was lost during the process.
+    if audit:
+        # We call the standalone audit logic here using the dynamic paths
+        audit_pipeline(
+            input_path=input_path, 
+            output_path=output_path, 
+            config=config
+        )
+
+@app.command(name="audit")
+def audit_pipeline(
+    input_path: Path = typer.Option(INPUT_DIR, "--input", "-i", help="Source Markdown directory"),
+    output_path: Path = typer.Option(OUTPUT_DIR, "--output", "-o", help="Converted AsciiDoc directory"),
+    config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
+) -> None:
+    """
+    COMMAND AUDIT: Validates content parity between Markdown and AsciiDoc.
+    
+    Independent validation check to ensure no content was lost during 
+    the transformation process.
+    """
+    config_path = Path(config)
+    pipeline_config = load_config(config_path)
+    
+    # Initialize the validator with the knowledge base
+    validator = ParityValidator(config=pipeline_config)
+    
+    console.print(f"\n[bold blue]Audit:[/] Comparing [cyan]{input_path}[/] ↔ [cyan]{output_path}[/]")
+    
+    # Run the validation
+    reports = validator.validate_directories(Path(input_path), Path(output_path))
+    
+    # Generate the professional terminal report
+    validator.render_terminal_report(reports)
 
 def main():
     """Main entry point for the CLI."""

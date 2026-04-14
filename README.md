@@ -4,14 +4,14 @@
 
 ## 📌 Core Mission
 
-Transitioning legacy Markdown to AsciiDoc often results in "broken" UI components (tabs, collapsibles) and inconsistent grammar. Transpiler-Pro automates the tedious parts of this migration:
+Transitioning legacy Markdown to AsciiDoc often results in "broken" UI components (tabs, collapsibles) and inconsistent grammar. Transpiler-Pro automates the tedious parts of this migration through four key pillars:
 
-1. **Structural Integrity** - Converts complex Markdown (Admonitions, Collapsibles, Tables) without breaking syntax.
+1. **Structural Integrity** - Converts complex Markdown (Admonitions, Collapsibles, Tables) and mirrors assets (images, `.yml`) without breaking syntax.
 2. **Style Validation** - Checks content against the official **SUSE Vale Style Guide**.
-3. **Linguistic Healing** - Uses AI to automatically fix future tense and wordiness.
-4. **Branding Enforcement** - Dynamically ensures consistent use of SUSE product names and technical terms.
+3. **Linguistic Healing** - Uses AI to automatically fix future tense and wordiness while maintaining subject-verb agreement.
+4. **Content Parity Audit** - **(New)** Automatically validates that no text, code blocks, or headings were lost during the conversion process via a high-fidelity parity engine.
 
-## ⚙️ The "Shield-Convert-Repair" Architecture
+## ⚙️ The "Shield-Convert-Repair-Audit" Architecture
 
 Transpiler-Pro operates using a multi-stage "Transformation and Healing" process:
 
@@ -20,7 +20,7 @@ Transpiler-Pro operates using a multi-stage "Transformation and Healing" process
 Standard converters often mangle Docusaurus-style admonitions (`:::note`) or HTML `<details>`. 
 
 * **Shielding Engine** - Uses regex to identify these complex blocks and replace them with unique temporary tokens (Shields).
-* **Pandoc Integration** - The clean file is converted to AsciiDoc.
+* **Asset Mirroring** - Automatically detects and copies non-Markdown files (for example, `_category_.yml`, images) to the output directory to maintain project structure.
 * **Restoration Pass** - Replaces tokens with high-fidelity, Antora-compliant AsciiDoc syntax (for example, `[%collapsible]`).
 
 ### Phase Y - Linguistic Repair (The NLP Engine)
@@ -28,8 +28,16 @@ Standard converters often mangle Docusaurus-style admonitions (`:::note`) or HTM
 Unlike simple find-and-replace tools, Transpiler-Pro understands **context** using the **spaCy `en_core_web_sm`** model.
 
 * **Dependency Parsing** - It identifies the relationship between a subject and a verb (for example, "The user will execute").
-* **Morphological Conjugation** - It does not just delete "will"; it conjugates the head verb to the correct present tense form ("executes"), ensuring subject-verb agreement.
-* **Surgical Edits** - Edits are applied using character offsets rather than global regex to prevent "collision bugs" (where fixing one word accidentally breaks another).
+* **Morphological Conjugation** - It conjugates the head verb to the correct present tense form ("executes"), ensuring subject-verb agreement rather than just deleting words.
+* **Surgical Edits** - Edits are applied using character offsets to prevent "collision bugs" where fixing one word accidentally breaks another.
+
+### Phase Z - Content Parity Audit (The Validator)
+
+To guarantee zero content loss during the complex transformation, the pipeline concludes with a high-fidelity audit:
+
+* **Semantic Word Coverage** - Compares significant tokens between Markdown and AsciiDoc, accounting for branding fixes so that "wifi" → "Wi-Fi" is marked as a 100% match.
+* **Structural Parity** - Validates that the number of headings and tables matches the source exactly.
+* **Snippet Protection** - Performs a strict count and similarity check on all code blocks to ensure technical instructions remain intact.
 
 ## 📂 Project Structure
 
@@ -40,6 +48,7 @@ Unlike simple find-and-replace tools, Transpiler-Pro understands **context** usi
 │   │   ├── converter.py    # Structural transformation & block restoration (Phase X)
 │   │   ├── linter.py       # Style sensing via Vale CLI
 │   │   ├── repair.py       # NLP-driven Tense & Subject-Verb Agreement (Phase Y)
+│   │   ├── validator.py    # Content Parity & Audit logic (Phase Z)
 │   │   └── fixer.py        # Rule-based repair (Spelling & Branding)
 │   ├── cli.py              # Typer orchestration (The Entry Point)
 ├── styles/suse-styles/     # Official SUSE Vale rulesets (Synced via Git)
@@ -74,7 +83,7 @@ cd transpiler-pro
 # Install Python dependencies and create virtual environment
 uv sync
 
-# Download the NLP Linguistic Model (Required for Phase Y)
+# Download the NLP Linguistic Model (Required for Phase Y & Z)
 uv run python -m spacy download en_core_web_sm
 ```
 
@@ -92,7 +101,7 @@ Transpiler-Pro is highly flexible. While it defaults to the internal `data/` dir
 
 ### 1. Full Pipeline (Recommended)
 
-The `full-run` command executes the entire sequence (Sync ➜ Convert ➜ Repair).
+The `full-run` command executes the entire sequence (**Sync ➜ Convert ➜ Repair ➜ Audit**). This is the safest way to ensure your content is both linguistically "healed" and structurally identical to the source.
 
 ```bash
 # Option A: Use internal data/ folders (Default)
@@ -102,26 +111,24 @@ uv run transpiler-pro full-run
 uv run transpiler-pro full-run --input ~/projects/my-docs/src --output ~/projects/my-docs/dist
 ```
 
-**Example**:
-
-```bash
-uv run transpiler-pro full-run \
-  --input "/Users/test-user/Desktop/Transpiler-Pro/new-testing-input" \
-  --output "/Users/test-user/Desktop/Transpiler-Pro/new-testing-output"
-```
+> **Note**: By default, `full-run` triggers an automatic audit at the end. You can skip this by adding the `--no-audit` flag.
 
 ### 2. Individual Phase Control
 
-You can also specify custom paths for individual phases for granular debugging:
+You can specify custom paths for individual phases for granular debugging or specific workflows:
 
 ```bash
 # Phase X: Structural Mirroring & Conversion
-# This will convert .md files and mirror assets (images/yml) to the output path
+# Converts .md and mirrors assets (images/yml) to the output path
 uv run transpiler-pro x-convert --input ./raw-md --output ./raw-adoc
 
 # Phase Y: Linguistic Healing
-# This processes .adoc files and ignores non-adoc assets
+# Processes .adoc files for grammar and branding
 uv run transpiler-pro y-repair --input ./raw-adoc --output ./final-docs
+
+# Phase Z: Content Parity Audit (Manual)
+# Manually verify integrity between any two MD and ADOC directories
+uv run transpiler-pro audit --input ./source-md --output ./converted-adoc
 ```
 
 ### 3. Target Specific Files
@@ -134,19 +141,34 @@ uv run transpiler-pro full-run --file security-guide.md
 
 ## 📊 Audit & Quality Control
 
-Transpiler-Pro does not just fix text, it provides a **Validation Report**.
+Transpiler-Pro provides a two-layered validation system to ensure your documentation is both linguistically polished and structurally complete.
 
-1. **Automated Fixes** - The CLI will report exactly how many items were Auto-Healed.
-2. **Audit Logs** - Any complex issues that require a human eye are logged in the terminal with line numbers
-3. **Style Guide Perfect** - If the tool says Document is style-guide perfect, it means it passed a final validation pass against the official SUSE rules
+### 1. Linguistic Healing Logs (Phase Y)
+
+During the repair phase, the tool tracks automated improvements and identifies manual tasks:
+
+* **Automated Fixes**: The CLI reports exactly how many grammar, tense, and branding issues were auto-healed.
+* **Review Logs**: Any complex stylistic issues that require a human eye are logged in the terminal with line numbers and rule IDs.
+* **Style-Guide Perfect**: A confirmation that the document has passed 100% of the SUSE official rules.
+
+### 2. Content Parity Dashboard (Phase Z)
+
+After conversion, the tool runs a strict comparison between the Markdown source and the AsciiDoc result:
+
+* **Prose Coverage**: A percentage-based check ensuring the core message was preserved.
+* **Structural Consistency**: Confirms that the number of headings and tables remains identical.
+* **Snippet Defense**: A zero-tolerance check for code blocks; if a technical snippet is lost, the audit flags it as a **CRITICAL ERROR**.
 
 ## 🧪 Development & Testing
 
-To verify the NLP logic and structural regex:
+To verify the NLP logic, structural regex, and parity engine:
 
 ```bash
-# Run the test suite
+# Run the test suite (Unit tests for Shields and NLP)
 uv run pytest
+
+# Run a manual audit on existing directories
+uv run transpiler-pro audit --input ./source --output ./dist
 
 # Generate the API Reference (Project Portal)
 uv run python docs.py
