@@ -106,14 +106,16 @@ def sync_styles(config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c"
 
 @app.command(name="x-convert")
 def convert_x(
-    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific file within inputs/"),
+    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific file within the input directory"),
+    input_path: Path = typer.Option(INPUT_DIR, "--input", "-i", help="Custom path to find input files"),
+    output_path: Path = typer.Option(INTERMEDIATE_DIR, "--output", "-o", help="Custom path to store intermediate files"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
     """
     COMMAND X: Performs structural conversion or direct asset mirroring of Markdown to AsciiDoc.
 
-    It scans the 'data/inputs' directory recursively, processes all supported 
-    extensions (.md, .mdx), and outputs raw .adoc files into 'data/intermediate'.
+    It scans the input directory recursively, processes all supported 
+    extensions (.md, .mdx), and outputs raw .adoc files into the intermediate directory.
     
     Key Features:
     - Markdown files (.md, .mdx) are processed via the DocConverter.
@@ -123,31 +125,35 @@ def convert_x(
     pipeline_config = load_config(config_path)
     converter = DocConverter(config_path=config_path)
 
+    # Resolve absolute paths for the provided input and output locations
+    src_dir = Path(input_path).resolve()
+    dest_dir = Path(output_path).resolve()
+
     # 1. Identify all target files (Capture ALL instead of just MD)
     all_files: List[Path] = []
     if file_name:
         path_obj = Path(file_name)
-        input_file = path_obj if path_obj.is_absolute() else INPUT_DIR / file_name
+        input_file = path_obj if path_obj.is_absolute() else src_dir / file_name
         if input_file.exists():
             all_files = [input_file]
     else:
         # Walk through everything in the input directory
-        all_files = [p for p in INPUT_DIR.rglob("*") if p.is_file()]
+        all_files = [p for p in src_dir.rglob("*") if p.is_file()]
 
     if not all_files:
-        console.print(f"[bold red]Error:[/] No files found in {INPUT_DIR}")
+        console.print(f"[bold red]Error:[/] No files found in {src_dir}")
         return
 
     supported_exts = pipeline_config.get("pipeline", {}).get("supported_extensions", [".md", ".mdx"])
 
     for src_path in all_files:
-        # Calculate relative path to maintain folder depth
-        rel_path = src_path.relative_to(INPUT_DIR)
+        # Calculate relative path to maintain folder depth based on the dynamic src_dir
+        rel_path = src_path.relative_to(src_dir)
         
         # Branching Logic: Transform or Mirror
         if src_path.suffix.lower() in supported_exts:
             # --- CONVERSION BRANCH ---
-            inter_path = INTERMEDIATE_DIR / rel_path.with_suffix(".adoc")
+            inter_path = dest_dir / rel_path.with_suffix(".adoc")
             inter_path.parent.mkdir(parents=True, exist_ok=True)
             
             console.print(f"[bold blue]X-Phase (Convert):[/] [cyan]{rel_path}[/] -> [yellow]{inter_path.name}[/]")
@@ -155,7 +161,7 @@ def convert_x(
         else:
             # --- MIRROR BRANCH ---
             # Copy non-markdown files (like _category_.yml, images, etc.) directly
-            inter_path = INTERMEDIATE_DIR / rel_path
+            inter_path = dest_dir / rel_path
             inter_path.parent.mkdir(parents=True, exist_ok=True)
             
             console.print(f"[bold magenta]X-Phase (Mirror):[/] [cyan]{rel_path}[/]")
@@ -163,7 +169,9 @@ def convert_x(
 
 @app.command(name="y-repair")
 def repair_y(
-    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific ADOC file within intermediate/"),
+    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific ADOC file within the intermediate directory"),
+    input_path: Path = typer.Option(INTERMEDIATE_DIR, "--input", "-i", help="Custom path to find intermediate files"),
+    output_path: Path = typer.Option(OUTPUT_DIR, "--output", "-o", help="Custom path to store final healed files"),
     fix: bool = typer.Option(True, "--fix/--no-fix", help="Enable/Disable automated linguistic healing"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
@@ -182,18 +190,23 @@ def repair_y(
     audit_logger = AuditLogger()
     fixer = StyleFixer(config_path=config_path)
 
+    # Resolve absolute paths for the provided input and output locations
+    src_dir = Path(input_path).resolve()
+    dest_dir = Path(output_path).resolve()
+
     # Determine which files to process from the intermediate directory
     if file_name:
         path_obj = Path(file_name)
-        input_file = path_obj if path_obj.is_absolute() else INTERMEDIATE_DIR / file_name
+        input_file = path_obj if path_obj.is_absolute() else src_dir / file_name
         target_files = [input_file] if input_file.exists() else []
     else:
-        # Capture all files (including .yml, images, etc.) to ensure mirroring
-        target_files = [p for p in INTERMEDIATE_DIR.rglob("*") if p.is_file()]
+        # Capture all files (including .yml, images, etc.) to ensure mirroring from the dynamic src_dir
+        target_files = [p for p in src_dir.rglob("*") if p.is_file()]
 
     for inter_path in target_files:
-        rel_path = inter_path.relative_to(INTERMEDIATE_DIR)
-        final_path = OUTPUT_DIR / rel_path
+        # Calculate relative path based on the dynamic src_dir
+        rel_path = inter_path.relative_to(src_dir)
+        final_path = dest_dir / rel_path
         
         # Mirror structure to final output directory
         final_path.parent.mkdir(parents=True, exist_ok=True)
@@ -254,6 +267,8 @@ def repair_y(
 @app.command(name="full-run")
 def execute_full_pipeline(
     file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific file path"),
+    input_path: Path = typer.Option(INPUT_DIR, "--input", "-i", help="Custom path to find source Markdown files"),
+    output_path: Path = typer.Option(OUTPUT_DIR, "--output", "-o", help="Custom path to store final healed AsciiDoc files"),
     sync: bool = typer.Option(True, "--sync/--no-sync", help="Pull latest styles before running"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
@@ -267,16 +282,38 @@ def execute_full_pipeline(
     if sync:
         sync_styles(config=config)
     
-    # Run structural conversion
-    convert_x(file_name=file_name, config=config)
+    # 1. Run structural conversion
+    # We always use INTERMEDIATE_DIR as the bridge for Phase X output
+    convert_x(
+        file_name=file_name, 
+        input_path=input_path, 
+        output_path=INTERMEDIATE_DIR, 
+        config=config
+    )
     
-    # Map input filename (MD) to expected intermediate filename (ADOC) for Command Y
-    adoc_target = None
+    # 2. Map input filename to expected intermediate filename for Phase Y
+    # If it's a markdown file, Phase Y needs to look for the .adoc version
+    # If it's an asset (like .yml), Phase Y looks for the original name
+    target_name = None
     if file_name:
-        adoc_target = str(Path(file_name).with_suffix(".adoc"))
+        path_obj = Path(file_name)
+        pipeline_config = load_config(Path(config))
+        supported_exts = pipeline_config.get("pipeline", {}).get("supported_extensions", [".md", ".mdx"])
         
-    # Run linguistic repair
-    repair_y(file_name=adoc_target, fix=True, config=config)
+        if path_obj.suffix.lower() in supported_exts:
+            target_name = str(path_obj.with_suffix(".adoc"))
+        else:
+            target_name = file_name
+        
+    # 3. Run linguistic repair
+    # We pull from INTERMEDIATE_DIR and save to the final user-defined output_path
+    repair_y(
+        file_name=target_name, 
+        input_path=INTERMEDIATE_DIR, 
+        output_path=output_path, 
+        fix=True, 
+        config=config
+    )
 
 def main():
     """Main entry point for the CLI."""

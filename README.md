@@ -88,34 +88,48 @@ uv run transpiler-pro sync
 
 ## 🚀 Usage Guide
 
-### Full Pipeline (Recommended)
+Transpiler-Pro is highly flexible. While it defaults to the internal `data/` directory, you can point it at any external documentation repository using path flags.
 
-This command runs the entire sequence (Sync ➜ Convert ➜ Repair).
+### 1. Full Pipeline (Recommended)
+
+The `full-run` command executes the entire sequence (Sync ➜ Convert ➜ Repair).
 
 ```bash
-# Process everything in data/inputs/
+# Option A: Use internal data/ folders (Default)
 uv run transpiler-pro full-run
 
-# Process a specific file only
-uv run transpiler-pro full-run --file my-guide.md
+# Option B: Target external directories (Portable Mode)
+uv run transpiler-pro full-run --input ~/projects/my-docs/src --output ~/projects/my-docs/dist
 ```
 
-### Granular Control
-
-To run phases individually for debugging:
+**Example**:
 
 ```bash
-# Step 1: Convert only (MD ➜ ADOC)
-# For all files:
-uv run transpiler-pro x-convert
-# For a specific file:
-uv run transpiler-pro x-convert --file guide.md
+uv run transpiler-pro full-run \
+  --input "/Users/test-user/Desktop/Transpiler-Pro/new-testing-input" \
+  --output "/Users/test-user/Desktop/Transpiler-Pro/new-testing-output"
+```
 
-# Step 2: Repair only (Linguistic Healing)
-# For a single file:
-uv run transpiler-pro y-repair
-# For a specific file:
-uv run transpiler-pro y-repair --file guide.adoc
+### 2. Individual Phase Control
+
+You can also specify custom paths for individual phases for granular debugging:
+
+```bash
+# Phase X: Structural Mirroring & Conversion
+# This will convert .md files and mirror assets (images/yml) to the output path
+uv run transpiler-pro x-convert --input ./raw-md --output ./raw-adoc
+
+# Phase Y: Linguistic Healing
+# This processes .adoc files and ignores non-adoc assets
+uv run transpiler-pro y-repair --input ./raw-adoc --output ./final-docs
+```
+
+### 3. Target Specific Files
+
+If you only need to process a single document within a directory:
+
+```bash
+uv run transpiler-pro full-run --file security-guide.md
 ```
 
 ## 📊 Audit & Quality Control
