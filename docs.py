@@ -53,7 +53,7 @@ def build_portal():
     # 1. API & Test Docs & Coverage
     run_step("Generating API Reference", ["uv", "run", "pdoc", "src/transpiler_pro", "-o", str(docs_out), "--docformat", "google"])
     # run_step("Documenting Test Suite", ["uv", "run", "pdoc", "tests", "-o", str(docs_out), "--docformat", "google"])
-    run_step("Generating Coverage Report", ["uv", "run", "pytest", "--cov=src", f"--cov-report=html:{docs_out}/coverage_report"])
+    # run_step("Generating Coverage Report", ["uv", "run", "pytest", "--cov=src", f"--cov-report=html:{docs_out}/coverage_report"])
 
     # 2. Architecture Refinement (Dogfooding)
     arch_src = project_root / "System-Architecture.adoc"
