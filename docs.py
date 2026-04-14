@@ -52,7 +52,7 @@ def build_portal():
 
     # 1. API & Test Docs & Coverage
     run_step("Generating API Reference", ["uv", "run", "pdoc", "src/transpiler_pro", "-o", str(docs_out), "--docformat", "google"])
-    run_step("Documenting Test Suite", ["uv", "run", "pdoc", "tests", "-o", str(docs_out), "--docformat", "google"])
+    # run_step("Documenting Test Suite", ["uv", "run", "pdoc", "tests", "-o", str(docs_out), "--docformat", "google"])
     run_step("Generating Coverage Report", ["uv", "run", "pytest", "--cov=src", f"--cov-report=html:{docs_out}/coverage_report"])
 
     # 2. Architecture Refinement (Dogfooding)
@@ -62,7 +62,7 @@ def build_portal():
     if arch_src.exists():
         input_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy(arch_src, arch_input)
-        run_step("Refining Architecture Docs", ["uv", "run", "transpiler-pro", "run", "--file", "System-Architecture.adoc", "--fix"])
+        run_step("Refining Architecture Docs", ["uv", "run", "transpiler-pro", "full-run", "--file", "System-Architecture.adoc", "--no-audit"])
     
     # 3. Path Management for Architecture Output
     arch_refined = project_root / "data" / "outputs" / "System-Architecture.adoc"
