@@ -6,30 +6,30 @@
 
 Transitioning legacy Markdown to AsciiDoc often results in "broken" UI components (tabs, collapsibles) and inconsistent grammar. Transpiler-Pro automates the tedious parts of this migration:
 
-1. **Structural Integrity**: Converts complex Markdown (Admonitions, Collapsibles, Tables) without breaking syntax.
-2. **Style Validation**: Checks content against the official **SUSE Vale Style Guide**.
-3. **Linguistic Healing**: Uses AI to automatically fix future tense ("will") and wordiness.
-4. **Branding Enforcement**: Dynamically ensures `wifi` becomes `Wi-Fi` and `suse` becomes `SUSE`.
+1. **Structural Integrity** - Converts complex Markdown (Admonitions, Collapsibles, Tables) without breaking syntax.
+2. **Style Validation** - Checks content against the official **SUSE Vale Style Guide**.
+3. **Linguistic Healing** - Uses AI to automatically fix future tense and wordiness.
+4. **Branding Enforcement** - Dynamically ensures consistent use of SUSE product names and technical terms.
 
 ## ⚙️ The "Shield-Convert-Repair" Architecture
 
 Transpiler-Pro operates using a multi-stage "Transformation and Healing" process:
 
-### Phase X: Structural Conversion (The Converter)
+### Phase X - Structural Conversion (The Converter)
 
 Standard converters often mangle Docusaurus-style admonitions (`:::note`) or HTML `<details>`. 
 
-* **Shielding Engine**: Uses regex to identify these complex blocks and replace them with unique temporary tokens (Shields).
-* **Pandoc Integration**: The "clean" file is converted to AsciiDoc.
-* **Restoration Pass**: Replaces tokens with high-fidelity, Antora-compliant AsciiDoc syntax (e.g., `[%collapsible]`).
+* **Shielding Engine** - Uses regex to identify these complex blocks and replace them with unique temporary tokens (Shields).
+* **Pandoc Integration** - The clean file is converted to AsciiDoc.
+* **Restoration Pass** - Replaces tokens with high-fidelity, Antora-compliant AsciiDoc syntax (for example, `[%collapsible]`).
 
-### Phase Y: Linguistic Repair (The NLP Engine)
+### Phase Y - Linguistic Repair (The NLP Engine)
 
 Unlike simple find-and-replace tools, Transpiler-Pro understands **context** using the **spaCy `en_core_web_sm`** model.
 
-* **Dependency Parsing**: It identifies the relationship between a subject and a verb (e.g., "The user will execute").
-* **Morphological Conjugation**: It doesn't just delete "will"; it conjugates the head verb to the correct present tense form ("executes"), ensuring subject-verb agreement.
-* **Surgical Edits**: Edits are applied using character offsets rather than global regex to prevent "collision bugs" (where fixing one word accidentally breaks another).
+* **Dependency Parsing** - It identifies the relationship between a subject and a verb (for example, "The user will execute").
+* **Morphological Conjugation** - It does not just delete "will"; it conjugates the head verb to the correct present tense form ("executes"), ensuring subject-verb agreement.
+* **Surgical Edits** - Edits are applied using character offsets rather than global regex to prevent "collision bugs" (where fixing one word accidentally breaks another).
 
 ## 📂 Project Structure
 
@@ -51,7 +51,7 @@ Unlike simple find-and-replace tools, Transpiler-Pro understands **context** usi
 └── pyproject.toml          # Central configuration for the entire pipeline
 ```
 
-## 🛠 Installation & Setup (Reviewer Guide)
+## 🛠 Installation & Setup
 
 Follow these steps to set up the environment locally. Transpiler-Pro uses `uv` for lightning-fast, reproducible builds.
 
@@ -81,49 +81,64 @@ uv run python -m spacy download en_core_web_sm
 ### 3. Initialize Styles
 
 Sync the official openSUSE style guide to your local machine:
+
 ```bash
 uv run transpiler-pro sync
 ```
 
 ## 🚀 Usage Guide
 
-### Full Pipeline (Recommended)
+Transpiler-Pro is highly flexible. While it defaults to the internal `data/` directory, you can point it at any external documentation repository using path flags.
 
-This command runs the entire sequence: Sync ➜ Convert ➜ Repair.
+### 1. Full Pipeline (Recommended)
+
+The `full-run` command executes the entire sequence (Sync ➜ Convert ➜ Repair).
 
 ```bash
-# Process everything in data/inputs/
+# Option A: Use internal data/ folders (Default)
 uv run transpiler-pro full-run
 
-# Process a specific file only
-uv run transpiler-pro full-run --file my-guide.md
+# Option B: Target external directories (Portable Mode)
+uv run transpiler-pro full-run --input ~/projects/my-docs/src --output ~/projects/my-docs/dist
 ```
 
-### Granular Control
-
-If you want to run phases individually for debugging:
+**Example**:
 
 ```bash
-# Step 1: Convert only (MD ➜ ADOC)
-# For all files:
-uv run transpiler-pro x-convert
-# For a specific file:
-uv run transpiler-pro x-convert --file guide.md
+uv run transpiler-pro full-run \
+  --input "/Users/test-user/Desktop/Transpiler-Pro/new-testing-input" \
+  --output "/Users/test-user/Desktop/Transpiler-Pro/new-testing-output"
+```
 
-# Step 2: Repair only (Linguistic Healing)
-# For a single file:
-uv run transpiler-pro y-repair
-# For a specific file:
-uv run transpiler-pro y-repair --file guide.adoc
+### 2. Individual Phase Control
+
+You can also specify custom paths for individual phases for granular debugging:
+
+```bash
+# Phase X: Structural Mirroring & Conversion
+# This will convert .md files and mirror assets (images/yml) to the output path
+uv run transpiler-pro x-convert --input ./raw-md --output ./raw-adoc
+
+# Phase Y: Linguistic Healing
+# This processes .adoc files and ignores non-adoc assets
+uv run transpiler-pro y-repair --input ./raw-adoc --output ./final-docs
+```
+
+### 3. Target Specific Files
+
+If you only need to process a single document within a directory:
+
+```bash
+uv run transpiler-pro full-run --file security-guide.md
 ```
 
 ## 📊 Audit & Quality Control
 
-Transpiler-Pro doesn't just fix text; it provides a **Validation Report**.
+Transpiler-Pro does not just fix text, it provides a **Validation Report**.
 
-1. **Automated Fixes**: The CLI will report exactly how many items were "Auto-Healed."
-2. **Audit Logs**: Any complex issues that require a human eye are logged in the terminal with line numbers.
-3. **Style Guide Perfect**: If the tool says "Document is style-guide perfect," it means it passed a final validation pass against the official SUSE rules.
+1. **Automated Fixes** - The CLI will report exactly how many items were Auto-Healed.
+2. **Audit Logs** - Any complex issues that require a human eye are logged in the terminal with line numbers
+3. **Style Guide Perfect** - If the tool says Document is style-guide perfect, it means it passed a final validation pass against the official SUSE rules
 
 ## 🧪 Development & Testing
 
