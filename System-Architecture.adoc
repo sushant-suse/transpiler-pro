@@ -5,56 +5,64 @@ Transpiler-Pro is built on a *Decoupled Logic Architecture*. The Python source c
 
 == 🛰 Orchestration Layer
 
-* `cli.py` - The central conductor utilizing *Typer*. It manages the command lifecycle (`sync`, `x-convert`, `y-repair`, and `full-run`). It handles path resolution via `utils/paths.py`, ensures directory mirror-integrity, and orchestrates the comparison between initial and final linting reports to calculate "fixed" metrics.
-* `utils/logger.py` - The Audit Engine. It transforms raw linter violations into a clickable Markdown report. It utilizes the `file://` protocol for absolute URI linking, allowing developers to jump directly from the report to the specific line in their IDE (e.g., VS Code).
+* `cli.py` - The central conductor utilizing *Typer*. It manages the command lifecycle (`sync`, `x-convert`, `y-repair`, `audit`, and `full-run`). It handles path resolution via `utils/paths.py`, ensures directory mirror-integrity across external paths, and orchestrates the final parity audit to ensure 100% content retention.
+* `utils/logger.py` - The Audit Engine. It transforms raw linter violations into a clickable Markdown report. It utilizes the `file://` protocol for absolute URI linking, allowing developers to jump directly from the report to the specific line in their IDE (for example, VS Code).
 
 == ⚙️ Core Transformation & Repair Layer
 
 === 1. `core/converter.py` (The Structural Engineer)
 
-Handles the "Shield-Transpile-Restore" workflow to preserve document intent during the conversion from Markdown to AsciiDoc:
+Handles the "Shield-Transpile-Restore" workflow and directory structural integrity:
 
-* *Shielding* - Protects complex Markdown elements (Tabs, Collapsibles, XREFs) from being mangled by standard conversion tools (Pandoc) using regex-defined markers.
-* *Structural Conversion* - Executes a managed `Pandoc` process to handle standard Markdown-to-AsciiDoc conversion.
+* *Shielding* - Protects complex Markdown elements (Tabs, Collapsibles, XREFs) from being mangled by Pandoc using regex-defined markers.
+* *Asset Mirroring* - **(New)** Identifies non-convertible files (for example, `_category_.yml`, images) and mirrors them to the output directory, preserving the Antora component hierarchy.
 * *Restoration* - Replaces markers with high-fidelity, Antora-compliant AsciiDoc blocks (for example, `[%collapsible]` or `[tabs]`).
 
 === 2. `core/linter.py` (The Style Sensor)
 
-Integrates the *Vale CLI* as a diagnostic engine. It maps the *SUSE Style Guide* repository against the generated AsciiDoc. It extracts critical *Correction Metadata*—including Line Numbers, Severity, and Rule IDs—providing the data required for both automated healing and manual audit logging. It dynamically generates a `.vale.ini` file for every run to ensure environment isolation.
+Integrates the *Vale CLI* as a diagnostic engine. It maps the *SUSE Style Guide* repository against the generated AsciiDoc to extract correction metadata (Line Numbers, Severity, and Rule IDs). This provides the data required for both automated healing and manual audit logging.
 
 === 3. `core/repair.py` (The Recursive NLP Healer)
 
 The linguistic intelligence layer, utilizing *spaCy NLP* and surgical string manipulation:
 
-* *Proximity Fallback Subject Detection* - A robust heuristic that identifies the sentence subject by scanning backwards from auxiliary verbs, ensuring correct conjugation even in complex dependent clauses where standard dependency trees often fail.
-* *Surgical Replacement* - Unlike global regex, this engine uses exact character offsets provided by the NLP model to replace text. This prevents "collision bugs" where one rule accidentally overwrites another (e.g., ensuring "you are" and "it is" are handled correctly in the same document).
-* *Morphological Conjugation* - Dynamically generates third-person singular forms based on the verb lemma (for example, `verify` -> `verifies`, `execute` -> `executes`).
-* *Hyphen Shielding* - Utilizes a specialized `retokenize` pass to merge hyphenated words (e.g., `re-prompt`) so the NLP treats them as single semantic units.
+* *Proximity Fallback Subject Detection* - Identifies sentence subjects by scanning backwards from auxiliary verbs, ensuring correct conjugation in complex clauses.
+* *Surgical Replacement* - Uses exact character offsets from the NLP model to replace text, preventing "collision bugs" where one rule overwrites another.
+* *Morphological Conjugation* - Dynamically generates third-person singular forms (for example, `verify` -> `verifies`).
 
-=== 4. `core/fixer.py` (The Rule-Based Engine)
+=== 4. `core/validator.py` (The Parity Guardian)
 
-A surgical regex layer that handles non-grammatical style violations. It processes "trigger-based" suggestions from the linter, such as removing editorializing phrases ("note that", "actually") or applying specific term substitutions. It includes **Linguistic Guardrails** to prevent the linter from sabotaging the NLP engine's work.
+**(New)** A dedicated engine that performs a deep comparison between the Markdown source and the AsciiDoc output:
+
+* *Branding-Aware Coverage* - Strips syntax and compares "significant" words. It utilizes the Knowledge Base to ensure intentional branding fixes (for example, `wifi` -> `Wi-Fi`) are treated as matches rather than content loss.
+* *Structural Parity* - Confirms the count of headings and tables matches the source exactly.
+* *Snippet Protection* - Triggers a critical failure if any code blocks are missing or mangled during the transformation process.
+
+=== 5. `core/fixer.py` (The Rule-Based Engine)
+
+A surgical regex layer that handles non-grammatical style violations. It processes suggestions from the linter, such as removing editorializing phrases or applying specific term substitutions, while maintaining guardrails against the NLP engine.
 
 == 🧠 The Persistent Knowledge Base (`knowledge_base.json`)
 
 The `knowledge_base.json` file serves as the **External Brain** of the pipeline. Its significance lies in its ability to steer the code's behavior without requiring a re-deployment of the source logic.
 
-* *automated_fixes* - Acts as a Global Branding Guardrail. It enforces high-priority casing (e.g., `SUSE`, `Wi-Fi`, `IP`). The pipeline applies these with negative lookarounds to ensure they never break technical strings like URLs or image paths.
-* *ignored_rules* - A safety valve that tells the Linter to ignore specific SUSE style rules that may conflict with project-specific requirements (e.g., allowing specific figure widths).
-* *learned* - The "Auto-Heal" memory. When the linter suggests a spelling fix (e.g., `communiti` -> `community`), the fixer "learns" this correction and saves it here, automating the fix for all future occurrences across the entire documentation set.
+* *automated_fixes* - Acts as a Global Branding Guardrail. It enforces high-priority casing (for example, `SUSE`, `Wi-Fi`, `IP`). The pipeline applies these with negative lookarounds to ensure they never break technical strings like URLs or image paths.
+* *ignored_rules* - A safety valve that tells the Linter to ignore specific SUSE style rules that may conflict with project-specific requirements.
+* *learned* - The "Auto-Heal" memory. When the linter suggests a spelling fix, the fixer "learns" this correction and saves it here, automating the fix for all future occurrences across the entire documentation set.
 
 == 🔄 The Multi-Phase Data Flow
 
 . *Synchronization (`sync`)* - Pulls the latest rules from the official openSUSE style guide repository.
-. *Ingestion* - Markdown is pulled from `data/inputs/`.
-. *Conversion (Phase X)* - Structural transformation occurs via `converter.py`; raw AsciiDoc is saved to `data/intermediate/`.
-. *Validation (Phase Y - Part 1)* - The Linter generates an initial "Violation Map".
-. *Linguistic Healing (Phase Y - Part 2)* -
-** *NLP Pass*: `repair.py` performs tense shifting and branding normalization.
-** *Regex Pass*: `fixer.py` performs surgical deletions and rule-based swaps.
-. *Final Audit (Phase Y - Part 3)* - A second linter pass is executed. Any surviving issues are logged to the `Audit Report`, and the CLI displays the final "Fixed vs. Remaining" summary.
+. *Ingestion* - Markdown is pulled from provided `--input` paths (defaulting to `data/inputs/`).
+. *Conversion (Phase X)* - Structural transformation occurs via `converter.py`. Asset Mirroring ensures `.yml` and images are preserved. Raw AsciiDoc is saved to `data/intermediate/`.
+. *Linguistic Healing (Phase Y)* - 
+** *Diagnostics*: The Linter generates a "Violation Map."
+** *NLP Pass*: `repair.py` performs tense shifting and subject-verb agreement.
+** *Regex Pass*: `fixer.py` executes branding swaps and linter-driven corrections.
+. *Content Parity Audit (Phase Z)* - **(New)** `validator.py` compares the source Markdown against final AsciiDoc. It calculates word coverage and verifies structural integrity (headings, tables, code blocks).
+. *Final Reporting* - The CLI displays "Fixed vs. Remaining" style metrics and the final Parity Dashboard.
 
-== 📁 Data-Driven Layout
+== 📁 Data Layout
 
 [cols="1,2,2", options="header"]
 |===
@@ -63,4 +71,5 @@ The `knowledge_base.json` file serves as the **External Brain** of the pipeline.
 | *Branding Data* | Terminology & casing. | `data/knowledge_base.json` (`automated_fixes`)
 | *Grammar Rules* | Verb morphology & irregulars. | `repair.py` & `spaCy` model
 | *Style Standards* | SUSE technical rules. | `styles/suse-styles/`
+| *Content Parity* | Retention & Integrity. | `core/validator.py` logic
 |===

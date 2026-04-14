@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 .venv/
 venv/
-# .python-version
 .ruff_cache/
 .pytest_cache/
 
@@ -14,6 +13,10 @@ data/outputs/*
 data/intermediate/*
 data/logs/*
 !data/outputs/.gitkeep
+
+# --- Styles & Local Assets ---
+# This prevents git from fighting with our Python 'sync' command
+styles/suse-styles/
 
 # --- Tracking the Brain ---
 # data/knowledge_base.json is NOT in this list, meaning git will track it.
@@ -32,6 +35,5 @@ Project-Structure.txt
 Personal-Tracker.md
 
 # --- Documentation Portal Persistence ---
-# We must explicitly allow these so the CI runner doesn't skip them
 !docs/coverage_report/
 !docs/.nojekyll
