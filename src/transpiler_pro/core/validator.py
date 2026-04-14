@@ -5,11 +5,10 @@ Matches Markdown sources against converted AsciiDoc to ensure content integrity.
 """
 
 import re
-import json
 import difflib
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Set, Tuple
 
 @dataclass
 class ValidationIssue:
@@ -180,7 +179,8 @@ class ParityValidator:
             current_table_cols = 0
             for line in text.splitlines():
                 if line.startswith("|==="):
-                    if current_table_cols > 0: footprints.append(current_table_cols)
+                    if current_table_cols > 0: 
+                        footprints.append(current_table_cols)
                     current_table_cols = 0
                 elif line.startswith("|") and not line.startswith("|==="):
                     current_table_cols = max(current_table_cols, line.count("|"))
@@ -251,7 +251,7 @@ class ParityValidator:
         failed = total - passed
         
         print("\n" + "="*60)
-        print(f"🔍 TRANSPILER-PRO AUDIT REPORT")
+        print("🔍 TRANSPILER-PRO AUDIT REPORT")
         print("="*60)
         print(f"Total Files Scanned: {total}")
         print(f"Passed Validation:   {passed} ✅")
@@ -267,7 +267,6 @@ class ParityValidator:
             print(f"      Coverage: {r.coverage}%")
             
             for issue in r.issues:
-                sev_color = "red" if issue.severity == "ERROR" else "yellow"
                 print(f"      - [{issue.category}] {issue.message}")
                 if issue.detail:
                     print(f"        Detail: {issue.detail}")
