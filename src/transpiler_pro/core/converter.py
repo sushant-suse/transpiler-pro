@@ -35,6 +35,7 @@ class DocConverter:
         self.conv_cfg = self.config.get("conversions", {})
         self.metadata: Dict[str, Any] = {}
         self.discovered_title = None
+        self.json_registry: Dict[str, str] = {}
 
     def _load_project_config(self) -> Dict[str, Any]:
         """Loads the [tool.transpiler-pro] configuration block."""
@@ -59,6 +60,23 @@ class DocConverter:
         """
         self.metadata = {}
         self.discovered_title = None
+        self.json_registry = {}  # Reset for each file
+
+        # --- 0. UNIVERSAL ATOMIC SHIELD (FIXES UNIVERSITY & WORKFLOWS) ---
+        # Catch any component (JsonDisplay, TriggerPayload, etc.) or Video div/iframe.
+        def atomic_shield(match: Match) -> str:
+            index = len(self.json_registry)
+            marker = f"SHIELD_ATOMIC_BLOCK_{index}"
+            self.json_registry[marker] = match.group(0)
+            return marker
+
+        # Improved Regex: Captures the tag even if there is significant whitespace 
+        # or multiple newlines before the self-closing slash.
+        content = re.sub(r'<[A-Z][a-zA-Z]+.*?\s*/\s*>', atomic_shield, content, flags=re.DOTALL)
+        
+        # 2. Shield Video Containers and Iframes (Found in University files)
+        # Matches <div>...</div> or <iframe>...</iframe>
+        content = re.sub(r'<(div|iframe).*?</\1>', atomic_shield, content, flags=re.DOTALL)
 
         # --- 1. CODE BLOCK SHIELDING ---
         # We protect '#' characters inside code blocks so the Title Scavenger 
@@ -78,14 +96,15 @@ class DocConverter:
                 self.metadata = {}
 
         # --- 3. TITLE SCAVENGER ---
-        # Logic: Priority 1 is YAML 'title'. Priority 2 is the first H1 (#) found.
         self.discovered_title = self.metadata.get('title')
-        if not self.discovered_title:
-            h1_match = re.search(r'^#\s+(.*)$', content, re.M)
-            if h1_match:
+        # Even if we have a YAML title, we MUST find and remove the H1 from the body
+        # to prevent "Duplicate Title" noise in the audit.
+        h1_match = re.search(r'^#\s+(.*)$', content, re.M)
+        if h1_match:
+            if not self.discovered_title:
                 self.discovered_title = h1_match.group(1).strip()
-                # Remove the H1 from body as it will be promoted to the AsciiDoc Document Title (=).
-                content = content.replace(h1_match.group(0), "", 1)
+            # Always remove the H1 line from the body content
+            content = content.replace(h1_match.group(0), "", 1)
 
         # Restore shielded hashes after title scavenging is safe.
         content = content.replace('HASHSHIELD', '#')
@@ -122,6 +141,15 @@ class DocConverter:
         3. Normalizing cross-references (xrefs) for the Antora site generator.
         4. Constructing the standard AsciiDoc Header.
         """
+        # --- 0. INDESTRUCTIBLE REGISTRY RESTORATION ---
+        for marker, original_line in self.json_registry.items():
+            # Matches raw marker, mangled underscores, and optional ++ wrappers
+            # This is now prefix-agnostic to handle LINE, INDEX, or ATOMIC_BLOCK
+            pattern = marker.replace("_", r"(?:\+\+\_\+\+|_)")
+            pattern = rf"(?:\+\+)?\b{pattern}\b(?:\+\+)?"
+            
+            content = re.sub(pattern, lambda _: original_line, content)
+
         # --- 1. HEADING NORMALIZATION ---
         # Ensure heading levels are consistent (capping at level 5).
         content = re.sub(r'^={6,}\s+', r'===== ', content, flags=re.M)
@@ -184,6 +212,10 @@ class DocConverter:
             """Converts Markdown links into Antora-compatible xrefs."""
             raw_path = match.group(1) or ""
             anchor = match.group(2) or ""
+
+            # Clean Pandoc mangle from path and anchor
+            raw_path = raw_path.replace("++_++", "_")
+            anchor = anchor.replace("++_++", "_")
             
             # Clean and normalize path: remove extensions and 'inputs/' folder noise
             path = raw_path.replace(".md", "").replace(".adoc", "").replace("./", "").strip("/")

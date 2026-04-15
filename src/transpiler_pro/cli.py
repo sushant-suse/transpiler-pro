@@ -12,6 +12,8 @@ The CLI ensures that directory structures are mirrored exactly from the
 'data/inputs' folder to 'data/outputs', supporting nested subfolders.
 """
 
+import time
+import datetime
 import tomllib
 import subprocess
 import shutil
@@ -201,8 +203,12 @@ def repair_y(
         input_file = path_obj if path_obj.is_absolute() else src_dir / file_name
         target_files = [input_file] if input_file.exists() else []
     else:
-        # Capture all files (including .yml, images, etc.) to ensure mirroring from the dynamic src_dir
-        target_files = [p for p in src_dir.rglob("*") if p.is_file()]
+        # Only process actual files, and skip system noise like .DS_Store
+        # Also, we filter to ensure we only look at relevant extensions to avoid redundant passes
+        target_files = [
+            p for p in src_dir.rglob("*") 
+            if p.is_file() and not p.name.startswith(".")
+        ]
 
     for inter_path in target_files:
         # Calculate relative path based on the dynamic src_dir
@@ -257,7 +263,7 @@ def repair_y(
                 
                 console.print(f"  [bold green]✨ Processing complete for {rel_path}.[/]")
                 if residual_count > 0:
-                    console.print(f"  [bold green]{fixed_count} fixed.[/] [bold yellow]📋 {residual_count} items in audit log.[/]")
+                    console.print(f"  [bold green]{fixed_count} fixed.[/] [bold yellow]📋 Rest of the items can be found in the audit log.[/]")
                 else:
                     console.print(f"  [bold green]✅ {fixed_count} fixed. Document is style-guide perfect![/]")
         else:
@@ -281,6 +287,12 @@ def execute_full_pipeline(
     lifecycle of a document, maintaining folder structures and ensuring the 
     highest linguistic quality.
     """
+    # Capture the start time for performance monitoring and reporting in the terminal.
+    start_time = time.time()
+    start_timestamp = datetime.now().strftime("%H:%M:%S")
+    
+    console.print(f"\n[bold green]🚀 Pipeline Started at {start_timestamp}[/]")
+
     if sync:
         sync_styles(config=config)
     
@@ -302,6 +314,7 @@ def execute_full_pipeline(
         pipeline_config = load_config(Path(config))
         supported_exts = pipeline_config.get("pipeline", {}).get("supported_extensions", [".md", ".mdx"])
         
+        # If it's a markdown file, we must look for the converted .adoc name in the next phase
         if path_obj.suffix.lower() in supported_exts:
             target_name = str(path_obj.with_suffix(".adoc"))
         else:
@@ -326,6 +339,11 @@ def execute_full_pipeline(
             output_path=output_path, 
             config=config
         )
+    
+    # Capture the end time and calculate total duration for the entire pipeline execution
+    end_time = time.time()
+    duration = end_time - start_time
+    console.print(f"\n[bold green]🏁 Pipeline Finished in {duration:.2f} seconds.[/]")
 
 @app.command(name="audit")
 def audit_pipeline(
