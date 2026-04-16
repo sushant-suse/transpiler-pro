@@ -13,7 +13,7 @@ The CLI ensures that directory structures are mirrored exactly from the
 """
 
 import time
-import datetime
+from datetime import datetime
 import tomllib
 import subprocess
 import shutil
@@ -126,13 +126,12 @@ def convert_x(
     """
     config_path = Path(config)
     pipeline_config = load_config(config_path)
-    converter = DocConverter(config_path=config_path)
 
-    # Resolve absolute paths for the provided input and output locations
+    # Resolve absolute paths
     src_dir = Path(input_path).resolve()
     dest_dir = Path(output_path).resolve()
 
-    # 1. Identify all target files (Capture ALL instead of just MD)
+    # 1. Identify all target files
     all_files: List[Path] = []
     if file_name:
         path_obj = Path(file_name)
@@ -140,7 +139,6 @@ def convert_x(
         if input_file.exists():
             all_files = [input_file]
     else:
-        # Walk through everything in the input directory
         all_files = [p for p in src_dir.rglob("*") if p.is_file()]
 
     if not all_files:
@@ -150,20 +148,22 @@ def convert_x(
     supported_exts = pipeline_config.get("pipeline", {}).get("supported_extensions", [".md", ".mdx"])
 
     for src_path in all_files:
-        # Calculate relative path to maintain folder depth based on the dynamic src_dir
         rel_path = src_path.relative_to(src_dir)
         
-        # Branching Logic: Transform or Mirror
         if src_path.suffix.lower() in supported_exts:
             # --- CONVERSION BRANCH ---
             inter_path = dest_dir / rel_path.with_suffix(".adoc")
             inter_path.parent.mkdir(parents=True, exist_ok=True)
             
             console.print(f"[bold blue]X-Phase (Convert):[/] [cyan]{rel_path}[/] -> [yellow]{inter_path.name}[/]")
+            
+            # CRITICAL FIX: Instantiate the converter INSIDE the loop.
+            # This ensures each file has its own private, empty json_registry.
+            # It makes the conversion process "stateless" and prevents data bleeding.
+            converter = DocConverter(config_path=config_path)
             converter.convert_file(src_path, inter_path)
         else:
             # --- MIRROR BRANCH ---
-            # Copy non-markdown files (like _category_.yml, images, etc.) directly
             inter_path = dest_dir / rel_path
             inter_path.parent.mkdir(parents=True, exist_ok=True)
             
@@ -205,9 +205,10 @@ def repair_y(
     else:
         # Only process actual files, and skip system noise like .DS_Store
         # Also, we filter to ensure we only look at relevant extensions to avoid redundant passes
+        # Better: Only grab files that actually exist in the conversion map or are assets
         target_files = [
             p for p in src_dir.rglob("*") 
-            if p.is_file() and not p.name.startswith(".")
+            if p.is_file() and not p.name.startswith(".") and p.suffix.lower() != ".tmp"
         ]
 
     for inter_path in target_files:
@@ -223,22 +224,30 @@ def repair_y(
             # 1. Standard AsciiDoc Repair Path
             shutil.copy2(inter_path, final_path)
             
-            console.print(f"\n[bold blue]Y-Phase:[/] Validating [cyan]{rel_path}[/]")
+            # Identify if the folder belongs to a technical category to skip NLP paraphrasing
+            technical_folders = ["rest-api", "workflows", "templates", "references"]
+            is_technical = any(folder in str(rel_path) for folder in technical_folders)
+
+            if is_technical:
+                console.print(f"\n[bold yellow]Y-Phase (Technical Mode):[/] Applying Style Guide only for [cyan]{rel_path}[/]")
+            else:
+                console.print(f"\n[bold blue]Y-Phase (Full Repair):[/] Validating [cyan]{rel_path}[/]")
             
             linter = StyleLinter(final_path, config_path=config_path)
             linter.setup_config()
             
-            # First Pass: Identify violations
+            # First Pass: Identify violations via Vale
             initial_findings = linter.run()
             linter.display_report(initial_findings)
             
             if fix and initial_findings:
-                # Linguistic Engine: Fix grammar/tense shifting
-                content = final_path.read_text(encoding="utf-8")
-                healed = repair_engine.repair_text(content)
-                final_path.write_text(healed, encoding="utf-8")
+                # 1. Linguistic Engine: Only fix grammar/tense for non-technical prose
+                if not is_technical:
+                    content = final_path.read_text(encoding="utf-8")
+                    healed = repair_engine.repair_text(content)
+                    final_path.write_text(healed, encoding="utf-8")
                 
-                # Style Fixer: Fix spelling, branding, and linter-specific suggestions
+                # 2. Style Fixer: ALWAYS fix spelling, branding, and technical cleanup (for all files)
                 file_key = str(final_path.resolve())
                 fixer.fix_file(final_path, initial_findings.get(file_key, []))
 
@@ -266,9 +275,11 @@ def repair_y(
                     console.print(f"  [bold green]{fixed_count} fixed.[/] [bold yellow]📋 Rest of the items can be found in the audit log.[/]")
                 else:
                     console.print(f"  [bold green]✅ {fixed_count} fixed. Document is style-guide perfect![/]")
+            else:
+                console.print(f"  [bold green]✅ No style violations found for {rel_path}.[/]")
         else:
-            # 2. Asset Mirror Path
-            console.print(f"[bold magenta]Y-Phase (Mirror):[/] [cyan]{rel_path}[/]")
+            # 2. Asset Mirror Path (Images, YML, etc.)
+            console.print(f"[bold magenta]X-Phase (Mirror):[/] [cyan]{rel_path}[/]")
             shutil.copy2(inter_path, final_path)
 
 @app.command(name="full-run")
@@ -288,7 +299,10 @@ def execute_full_pipeline(
     highest linguistic quality.
     """
     # Capture the start time for performance monitoring and reporting in the terminal.
-    start_time = time.time()
+    # 1. Use time.time() for the duration calculation (stopwatch)
+    start_time = time.time()  
+    
+    # 2. Use datetime.now() for the human-readable timestamp
     start_timestamp = datetime.now().strftime("%H:%M:%S")
     
     console.print(f"\n[bold green]🚀 Pipeline Started at {start_timestamp}[/]")
@@ -343,7 +357,8 @@ def execute_full_pipeline(
     # Capture the end time and calculate total duration for the entire pipeline execution
     end_time = time.time()
     duration = end_time - start_time
-    console.print(f"\n[bold green]🏁 Pipeline Finished in {duration:.2f} seconds.[/]")
+    duration_in_minutes = duration / 60
+    console.print(f"\n[bold green]🏁 Pipeline Finished in {duration_in_minutes:.2f} minutes.[/]")
 
 @app.command(name="audit")
 def audit_pipeline(

@@ -55,7 +55,6 @@ target-version = "py312"
 [tool.transpiler-pro.pipeline]
 supported_extensions = [".md", ".mdx"]
 knowledge_base = "data/knowledge_base.json"
-# Centralized source for the sync command
 official_style_guide = "https://github.com/openSUSE/suse-vale-styleguide.git"
 
 [tool.transpiler-pro.grammar]
@@ -77,14 +76,14 @@ removal_trigger = "removing"
 extension_map = { md = "adoc", mdx = "adoc" }
 path_normalization = [{ regex = "^\\./", replacement = "" }]
 
-# PHASE 1: SHIELDING (Lightweight & Safe)
+# PHASE 1: SHIELDING
+# Removed JSX regex to prevent conflict with Python Loop, kept Admonition and Details.
 shielding_patterns = [
     { regex = "(?m)^:::", replacement = "SHIELD_ADMON_MARK" },
     { regex = "<details(.*?)>", replacement = "SHIELD_DETAILS_START" },
     { regex = "</details>", replacement = "SHIELD_DETAILS_END" },
     { regex = "<summary(.*?)>", replacement = "SHIELD_SUMMARY_START" },
-    { regex = "</summary>", replacement = "SHIELD_SUMMARY_END" },
-    { regex = "<([A-Z][a-zA-Z0-9]*)([^>]*?)/>", replacement = "SHIELD_JSX_SELF_\\1_END" }
+    { regex = "</summary>", replacement = "SHIELD_SUMMARY_END" }
 ]
 
 # PHASE 2: RESTORATION
@@ -93,74 +92,34 @@ restoration_patterns = [
     { regex = "SHIELD_DETAILS_START", replacement = "<details>" },
     { regex = "SHIELD_DETAILS_END", replacement = "</details>" },
     { regex = "SHIELD_SUMMARY_START", replacement = "<summary>" },
-    { regex = "SHIELD_SUMMARY_END", replacement = "</summary>" },
-    { regex = "SHIELD_JSX_SELF_(.*?)_END", replacement = "<\\1 />" }
+    { regex = "SHIELD_SUMMARY_END", replacement = "</summary>" }
 ]
 
-# PHASE 3: CLEANUP
+# PHASE 3: CLEANUP (PRESERVED ALL CRASH-FIXING RULES)
 cleanup_regex = [
-    # --- PARITY FIXES (Fixes Pandoc noise in technical strings) ---
-    
-    # 1. Fix mangled Path Variables (e.g., APPLICATION++_++ID -> APPLICATION_ID)
+    # 1. Technical Recovery (Reclaims strings from Pandoc's ++ jail)
+    { regex = "(?<!\\+)\\+\\+([a-zA-Z0-9_\\$\\-\\.\\*]+)\\+\\+(?!\\+)", replacement = "\\1", flags = "M" },
+
+    # 2. Path & Underscore Repair (Fixes APPLICATION_ID)
     { regex = "([A-Z0-9]+)\\+\\+\\_\\+\\+([A-Z0-9]+)", replacement = "\\1_\\2", flags = "M" },
-    
-    # 2. Fix escaped wildcards in technical scopes (e.g., events.++*++ -> events.*)
-    { regex = "\\.\\+\\+\\*\\+\\+", replacement = ".*", flags = "M" },
-    
-    # 3. Fix escaped braces/characters in inline JSON snippets (e.g., ++{++ -> {)
-    { regex = "\\+\\+([{}*])\\+\\+", replacement = "\\1", flags = "M" },
 
-    # 4. GLOBAL TECHNICAL UN-ESCAPE
-    # We broaden this to ensure that any technical string 3+ chars long 
-    # wrapped in pluses is released for the audit tool to see.
-    { regex = "\\+\\+([a-zA-Z0-9_\\$\\-\\.\\*]+)\\+\\+", replacement = "\\1", flags = "M" },
-
-    # 5. REFINED PASSTHROUGH CLEANUP
-    # Only strips pluses if they are strictly surrounding alphanumeric technical slugs
-    # to prevent recursive matching on complex AsciiDoc syntax.
-    { regex = "(?<!\\+)\\+\\+([a-zA-Z0-9_\\$\\-\\.]+)\\+\\+(?!\\+)", replacement = "\\1", flags = "M" },
-
-    # 6. HTML ENTITY RECOVERY (Fixes University/Template failures)
-    # Reverts codes to characters so the Audit tool matches 'addition's' instead of 'addition&#x27;s'
+    # 3. HTML Entity Recovery (Essential for Parity Audit)
     { regex = "&#x27;", replacement = "'", flags = "M" },
     { regex = "&quot;", replacement = "\"", flags = "M" },
-    { regex = "&gt;", replacement = ">", flags = "M" },
-    { regex = "&lt;", replacement = "<", flags = "M" },
 
-    # 7. STRIP MDX IMPORTS (Noise Cleanup for Trigger/Workflow files)
-    # Removes lines like 'import TriggerPayload from ...'
+    # 4. Technical Noise Stripper (Cleans MDX attributes to help Audit tool)
     { regex = "(?m)^import.*?from.*$", replacement = "", flags = "M" },
+    { regex = "\\s+[a-zA-Z0-9\\-]+=([\"'{].*?[\"'}]|[^\\s>]+)", replacement = "", flags = "M" },
 
-    # 8. GLOBAL TECHNICAL UN-ESCAPE (Final Boss Edition)
-    # This now specifically allows for camelCase, dots, and common technical prefixes.
-    # It will release words like ++removeColumn++, ++application.export++, ++$ne++
-    { regex = "\\+\\+([a-zA-Z0-9_\\$\\-\\.\\*]+)\\+\\+", replacement = "\\1", flags = "M" },
-
-    # 9. JSX TAG CLEANUP
-    # Removes leftover React fragment artifacts (e.g., <p> or <span> around technical IDs)
-    { regex = "<[/]?(span|p|strong|code).*?>", replacement = "", flags = "M" },
-
-    # 10. SPAN & ALIGN CLEANUP (Fixes the remaining University/Device noise)
-    # The audit mentioned 'span' and 'align' as missing—these are HTML artifacts.
-    { regex = "<[/]?(span|div|p|align|style|font).*?>", replacement = "", flags = "M" },
-
-    # --- STANDARD STRUCTURAL CLEANUP ---
-
-    # Converts blockquotes into Admonition blocks; routes to 'uppercase_label' hook in Python
+    # 5. Admonition Promotion Block
     { regex = "(?m)^____\\n\\*(Note|Tip|Warning|Important|Caution)[:]?\\*[:]?\\s*(.*?)\\n____", replacement = "[\\1]\n====\n\\2\n====", hook = "uppercase_label", flags = "M" },
-    
-    # Force newlines for squashed numbered list items (Fixes spacing issues)
+
+    # 6. Formatting & Space Recovery
     { regex = "([^\\n])\\s+\\.\\s+", replacement = "\\1\\n. ", flags = "M" },
-    
-    # Remove Pandoc list metadata and image captions
     { regex = "\\[arabic\\]\\n", replacement = "" },
     { regex = "^\\..*?\\nimage::", replacement = "image::", flags = "M" },
-    
-    # Strip Link noise and character escaping introduced by Pandoc
     { regex = "\\+\\+\\[\\+\\+", replacement = "[" },
     { regex = "\\+\\+\\]\\+\\+", replacement = "]" },
-    
-    # Handle marker cleanup for spaces and newlines
     { regex = "PROTECTSPACE", replacement = " " },
     { regex = "SHIELDSEP", replacement = "\n" }
 ]

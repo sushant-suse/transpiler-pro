@@ -35,7 +35,7 @@ class DocConverter:
         self.conv_cfg = self.config.get("conversions", {})
         self.metadata: Dict[str, Any] = {}
         self.discovered_title = None
-        self.json_registry: Dict[str, str] = {}
+        # registry: Dict[str, str] = {}
 
     def _load_project_config(self) -> Dict[str, Any]:
         """Loads the [tool.transpiler-pro] configuration block."""
@@ -48,7 +48,7 @@ class DocConverter:
         except Exception:
             return {}
 
-    def pre_process_markdown(self, content: str) -> str:
+    def pre_process_markdown(self, content: str) -> tuple[str, dict]:
         """
         Prepares Markdown for Pandoc by shielding modern syntax and extracting metadata.
 
@@ -56,27 +56,57 @@ class DocConverter:
             content (str): Raw Markdown string.
 
         Returns:
-            str: "Shielded" Markdown ready for Pandoc.
+            tuple[str, dict]: A tuple containing the "shielded" Markdown ready for Pandoc and the extracted metadata.
         """
         self.metadata = {}
         self.discovered_title = None
-        self.json_registry = {}  # Reset for each file
+        # Use a clear local name for the registry we will return
+        local_registry = {} 
 
-        # --- 0. UNIVERSAL ATOMIC SHIELD (FIXES UNIVERSITY & WORKFLOWS) ---
-        # Catch any component (JsonDisplay, TriggerPayload, etc.) or Video div/iframe.
-        def atomic_shield(match: Match) -> str:
-            index = len(self.json_registry)
-            marker = f"SHIELD_ATOMIC_BLOCK_{index}"
-            self.json_registry[marker] = match.group(0)
-            return marker
+        # --- 0. PRECISION JSX SHIELDING ---
+        target_components = ["JsonDisplay", "TriggerPayload", "CircuitDisplay"]
+        for tag_name in target_components:
+            search_pos = 0
+            while True:
+                # Find the EXACT start of the tag
+                start_tag = content.find(f"<{tag_name}", search_pos)
+                if start_tag == -1: break
+                
+                # Find the matching balanced closing tag
+                end_tag = -1
+                potential_end = start_tag
+                while True:
+                    potential_end = content.find("/>", potential_end + 1)
+                    if potential_end == -1: break
+                    
+                    # Capture the full string including the closing '/>'
+                    test_chunk = content[start_tag : potential_end + 2]
+                    # BALANCE CHECK: Ensure all JSON braces are inside this chunk
+                    if test_chunk.count("{") == test_chunk.count("}"):
+                        end_tag = potential_end + 2
+                        break
+                
+                if end_tag == -1:
+                    search_pos = start_tag + 1
+                    continue
+                
+                # --- LITERAL CAPTURE ---
+                # We grab the EXACT substring from the original content
+                full_block = content[start_tag : end_tag]
+                
+                index = len(local_registry)
+                marker = f"RESTORE_COMPONENT_TOKEN_{index}Z"
+                local_registry[marker] = full_block
+                
+                # --- LITERAL REPLACEMENT ---
+                # We replace that EXACT range with the marker
+                content = content[:start_tag] + marker + content[end_tag:]
+                
+                # Move search position forward
+                search_pos = start_tag + len(marker)
 
-        # Improved Regex: Captures the tag even if there is significant whitespace 
-        # or multiple newlines before the self-closing slash.
-        content = re.sub(r'<[A-Z][a-zA-Z]+.*?\s*/\s*>', atomic_shield, content, flags=re.DOTALL)
-        
-        # 2. Shield Video Containers and Iframes (Found in University files)
-        # Matches <div>...</div> or <iframe>...</iframe>
-        content = re.sub(r'<(div|iframe).*?</\1>', atomic_shield, content, flags=re.DOTALL)
+        # DEBUG PASS 1: Confirm shielding count
+        print(f"[DEBUG 1] Phase-X Shielding: Found {len(local_registry)} components in current file.")
 
         # --- 1. CODE BLOCK SHIELDING ---
         # We protect '#' characters inside code blocks so the Title Scavenger 
@@ -129,34 +159,62 @@ class DocConverter:
             else:
                 content = re.sub(regex, replacement, content, flags=re.S)
         
-        return content
+        return content, local_registry
 
-    def post_process_asciidoc(self, content: str) -> str:
+    def post_process_asciidoc(self, content: str, registry: dict) -> str:
         """
         Finalizes the AsciiDoc output after Pandoc has finished.
 
         This involves:
-        1. Restoring shielded blocks (Videos, Tabs, Collapsibles).
+        1. Restoring shielded blocks (Videos, Tabs, Collapsibles, Components, URLs).
         2. Promoting Markdown-style notes to AsciiDoc Admonition blocks.
         3. Normalizing cross-references (xrefs) for the Antora site generator.
         4. Constructing the standard AsciiDoc Header.
         """
-        # --- 0. INDESTRUCTIBLE REGISTRY RESTORATION ---
-        for marker, original_line in self.json_registry.items():
-            # Matches raw marker, mangled underscores, and optional ++ wrappers
-            # This is now prefix-agnostic to handle LINE, INDEX, or ATOMIC_BLOCK
-            pattern = marker.replace("_", r"(?:\+\+\_\+\+|_)")
-            pattern = rf"(?:\+\+)?\b{pattern}\b(?:\+\+)?"
+        # DEBUG PASS 2: Confirm registry arrival
+        print(f"[DEBUG 2] Phase-X Restoration: Registry received with {len(registry)} keys.")
+
+        # Sort by length descending to prevent _10 being hit by _1
+        sorted_keys = sorted(registry.keys(), key=len, reverse=True)
+        restore_count = 0
+        
+        for marker in sorted_keys:
+            original_value = registry[marker]
             
-            content = re.sub(pattern, lambda _: original_line, content)
+            # 1. Try Literal Match first (Fastest)
+            if marker in content:
+                content = content.replace(marker, original_value)
+                restore_count += 1
+                continue
+
+            # 2. Try the "Pandoc-Safe" Regex
+            # This handles: `TOKEN`, +TOKEN+, TOKEN with escaped underscores, 
+            # or TOKEN broken by line wraps.
+            # We break the marker into parts: ['RESTORE', 'COMPONENT', 'TOKEN', '0Z']
+            parts = marker.split('_')
+            # This regex allows for backslashes, spaces, or underscores between words
+            regex_pattern = r"[`\+\^]*" + r"[\\\_]*".join(map(re.escape, parts)) + r"[`\+\^]*"
+            
+            if re.search(regex_pattern, content):
+                content = re.sub(regex_pattern, original_value, content)
+                restore_count += 1
+                continue
+            
+            # 3. Final "Fuzzy" Fallback
+            # If the token is 'RESTORE_COMPONENT_TOKEN_0Z', we look for 'RESTORE' ... '0Z'
+            fuzzy_pattern = re.escape(parts[0]) + r".*?" + re.escape(parts[-1])
+            match = re.search(fuzzy_pattern, content)
+            if match and "RESTORE" in match.group(0):
+                content = content.replace(match.group(0), original_value)
+                restore_count += 1
+
+        print(f"[DEBUG 3] Phase-X Restoration: Successfully swapped {restore_count} markers back to data.")
 
         # --- 1. HEADING NORMALIZATION ---
-        # Ensure heading levels are consistent (capping at level 5).
         content = re.sub(r'^={6,}\s+', r'===== ', content, flags=re.M)
 
         # --- 2. MARKER RESTORATION ---
         content = re.sub(r'VIDEOTOKEN([a-zA-Z0-9_-]+)', r'video::\1[youtube]', content)
-        # Standardize smart quotes and ellipses
         content = content.replace('’', "'").replace('‘', "'").replace('“', '"').replace('”', '"').replace('…', '...')
 
         # Apply cleanup regex from pyproject.toml
@@ -257,6 +315,10 @@ class DocConverter:
         content = content.replace("SHIELDADMONSTARTtabs", "[tabs]\n====")
         content = content.replace("SHIELDADMONEND", "====")
         content = re.sub(r'^@tab\s+(.*)$', r'\1::', content, flags=re.M)
+        
+        # --- 8. TECHNICAL URL RECOVERY ---
+        # Fixes the specific chopping of the ssoDomain endpoint
+        content = re.sub(r'([a-zA-Z0-9])\?(\s|$)', r'\1?email=`\2', content)
 
         return header_block + content.strip()
     
@@ -272,14 +334,13 @@ class DocConverter:
         self.discovered_title = None
         
         raw_md = input_path.read_text(encoding='utf-8')
-        ready_md = self.pre_process_markdown(raw_md)
+        # Capture the local_registry specifically for this file
+        ready_md, local_registry = self.pre_process_markdown(raw_md)
         
-        # We write to a temporary file so Pandoc sees the 'shielded' version
         temp_md = input_path.with_suffix('.tmp.md')
         temp_md.write_text(ready_md, encoding='utf-8')
         
         try:
-            # Execute Pandoc CLI
             subprocess.run(
                 [
                     "pandoc", 
@@ -294,10 +355,9 @@ class DocConverter:
                 capture_output=True
             )
             
-            # Post-process the Pandoc result to restore shields and finalize headers
-            final_adoc = self.post_process_asciidoc(output_path.read_text(encoding='utf-8'))
+            # Inject the specific registry into the post-processor
+            final_adoc = self.post_process_asciidoc(output_path.read_text(encoding='utf-8'), local_registry)
             output_path.write_text(final_adoc, encoding='utf-8')
         finally:
-            # Tidy up transient files
             if temp_md.exists(): 
                 temp_md.unlink()
