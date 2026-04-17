@@ -12,6 +12,8 @@ The CLI ensures that directory structures are mirrored exactly from the
 'data/inputs' folder to 'data/outputs', supporting nested subfolders.
 """
 
+import time
+from datetime import datetime
 import tomllib
 import subprocess
 import shutil
@@ -257,7 +259,7 @@ def repair_y(
                 
                 console.print(f"  [bold green]✨ Processing complete for {rel_path}.[/]")
                 if residual_count > 0:
-                    console.print(f"  [bold green]{fixed_count} fixed.[/] [bold yellow]📋 {residual_count} items in audit log.[/]")
+                    console.print(f"  [bold green]{fixed_count} fixed.[/] [bold yellow]📋 Rest can be found in audit log.[/]")
                 else:
                     console.print(f"  [bold green]✅ {fixed_count} fixed. Document is style-guide perfect![/]")
         else:
@@ -281,6 +283,15 @@ def execute_full_pipeline(
     lifecycle of a document, maintaining folder structures and ensuring the 
     highest linguistic quality.
     """
+    # 0. Capture the start time for performance monitoring and reporting in the terminal.
+    # Use time.time() for the duration calculation (stopwatch)
+    start_time = time.time()  
+    
+    # Use datetime.now() for the easy readable timestamp
+    start_timestamp = datetime.now().strftime("%H:%M:%S")
+    
+    console.print(f"\n[bold green]:rocket: Pipeline Started at {start_timestamp}[/]")
+
     if sync:
         sync_styles(config=config)
     
@@ -326,6 +337,12 @@ def execute_full_pipeline(
             output_path=output_path, 
             config=config
         )
+
+    # Capture the end time and calculate total duration for the entire pipeline execution
+    end_time = time.time()
+    duration = end_time - start_time
+    duration_in_minutes = duration / 60
+    console.print(f"\n[bold green]:checkered_flag: Pipeline Finished in {duration_in_minutes:.2f} minutes.[/]")
 
 @app.command(name="audit")
 def audit_pipeline(
