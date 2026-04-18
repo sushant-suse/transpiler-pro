@@ -16,7 +16,7 @@ import subprocess
 import yaml
 from datetime import datetime
 from pathlib import Path
-from typing import Match, Optional, Dict, Any
+from typing import Match, Optional, Dict, Any, Set, List
 
 class DocConverter:
     """
@@ -36,6 +36,7 @@ class DocConverter:
         self.metadata: Dict[str, Any] = {}
         self.discovered_title = None
         self.used_ids: Set[str] = set()
+        self.protected_json: List[str] = []
 
     def _load_project_config(self) -> Dict[str, Any]:
         """Loads the [tool.transpiler-pro] configuration block."""
@@ -85,6 +86,8 @@ class DocConverter:
         self.metadata = {}
         self.discovered_title = None
         self.used_ids = set()
+        # Initialize storage for JSON components to protect them from Pandoc
+        self.protected_json = []
 
         # --- 1. CODE BLOCK SHIELDING ---
         # We protect '#' characters inside code blocks so the Title Scavenger 
@@ -136,6 +139,16 @@ class DocConverter:
             else:
                 content = re.sub(regex, replacement, content, flags=re.S)
         
+        # --- JSON COMPONENT SHIELDING ---
+        # Protects <JsonDisplay /> from being mangled into latexmath/footnotes by Pandoc
+        def shield_json_display(match):
+            # Pure alphanumeric placeholder to avoid Pandoc escaping
+            placeholder = f"JSONP{len(self.protected_json)}PROTECT"
+            self.protected_json.append(match.group(1))
+            return placeholder
+
+        content = re.sub(r'(<JsonDisplay.*?\/>)', shield_json_display, content, flags=re.DOTALL)
+
         # Protect existing Markdown IDs so Pandoc doesn't mangle curly braces
         content = re.sub(r'\{#(.*?)\}', r'IDSHIELDSTART\1IDSHIELDEND', content)
 
@@ -182,6 +195,16 @@ class DocConverter:
         content = re.sub(r'^={6,}\s+', r'===== ', content, flags=re.M)
 
         # --- 2. MARKER RESTORATION ---
+        # Restore JSON Components
+        if hasattr(self, 'protected_json'):
+            for i, original in enumerate(self.protected_json):
+                content = content.replace(f"JSONP{i}PROTECT", original)
+
+        # Clean up Pandoc "protection" artifacts in tags
+        content = content.replace("++_++", "_").replace("++{++", "{").replace("++}++", "}")
+        content = content.replace("++{{++", "{{").replace("++}}++", "}}")
+        content = content.replace("++<++", "<").replace("++>++", ">")
+
         content = re.sub(r'VIDEOTOKEN([a-zA-Z0-9_-]+)', r'video::\1[youtube]', content)
         # Standardize smart quotes and ellipses
         content = content.replace('’', "'").replace('‘', "'").replace('“', '"').replace('”', '"').replace('…', '...')
