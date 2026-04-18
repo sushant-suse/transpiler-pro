@@ -4,12 +4,23 @@ Description: Parity Validation Engine for Transpiler-Pro.
 Matches Markdown sources against converted AsciiDoc to ensure content integrity.
 """
 
+import spacy
 import re
 import difflib
 import json
+import html  # Ensure html is imported for unescape
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Tuple
+
+# Load the spaCy NLP model for lemmatization (tense-aware comparison)
+try:
+    nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+except OSError:
+    import subprocess
+    import sys
+    subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
 
 @dataclass
 class ValidationIssue:
@@ -48,7 +59,12 @@ class ParityValidator:
         }
     
     def _prepare_log_dir(self):
-        """Ensures log dir exists and is empty for the current run."""
+        """Ensures log dir exists and is empty for the current run.
+        
+        Args: None
+
+        Returns: None
+        """
         # We create the log directory if it doesn't exist and clear out any old logs to ensure that each run starts with a clean slate. 
         # This prevents confusion from stale data and ensures that any logs present after the run are relevant to the current validation process.
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -58,7 +74,16 @@ class ParityValidator:
             f.unlink()
 
     def _normalize_text(self, text: str, is_adoc: bool = False) -> str:
-        """Strips syntax to leave only comparable prose and technical tokens."""
+        """Strips syntax to leave only comparable prose and technical tokens.
+        
+        Args:
+            text (str): The raw content of the file to be normalized.
+            is_adoc (bool): Flag to indicate if the text is from an AsciiDoc file, which has different syntax rules than Markdown.
+        
+        Returns:
+            str: A cleaned version of the text containing only the prose and technical tokens relevant for comparison, 
+            with all formatting and structural syntax removed.
+        """
         if is_adoc:
             # 1. Strip AsciiDoc specific structural markers
             text = re.sub(r"^= .*", "", text, flags=re.M)      # Header
@@ -71,6 +96,11 @@ class ParityValidator:
             # 2. Neutralize Pandoc noise: 
             # Replace '++' with a space to prevent Hex tokens from merging (06++:++5D -> 06 5D)
             text = text.replace("++", " ") 
+
+            # Neutralize Antora Attribute braces to allow word-matching
+            # This ensures {longhorn-product-name} becomes 'longhorn product name'
+            # so the tokenization engine can compare it to the original Markdown prose.
+            text = text.replace("{", " ").replace("}", " ")
         else:
             # 3. Strip Markdown specific markers
             text = re.sub(r"---.*?---", "", text, flags=re.S) # Frontmatter
@@ -101,47 +131,69 @@ class ParityValidator:
         return text
 
     def get_significant_words(self, text: str) -> Set[str]:
-        """Extracts meaningful tokens while filtering technical noise (hex fragments/short dates)."""
-        # 1. Extract all alphanumeric tokens (Length 2+)
-        all_tokens = re.findall(r"\b[a-zA-Z0-9]{2,}\b", text.lower())
+        """Extracts meaningful tokens while handling branding and lemmatization.
+        
+        Args:
+            text (str): The text from which to extract significant words.
+        
+        Returns:
+            Set[str]: A set of significant words extracted from the text.
+        """
+        # Use spaCy to find the base 'lemma' of words to account for tense shifting
+        # (e.g., 'execute' in MD vs 'executes' in ADOC will both match as 'execute')
+        doc = nlp(text.lower())
         
         filtered_tokens = []
-        for t in all_tokens:
-            # Skip standard stop words
-            if t in self.stop_words:
+        for token in doc:
+            t = token.lemma_ # Root form (checks == check)
+            
+            if t in self.stop_words or not t.isalnum() or len(t) < 2:
                 continue
             
-            # --- NOISE REDUCTION FILTERS ---
-            
-            # A. Skip purely numeric strings under 5 digits (e.g., '06', '2020', '38')
-            # Catches: '2019', '2020', '00', '27', etc.
+            # Skip short numeric noise
             if t.isdigit() and len(t) < 5:
-                continue
-            
-            # B. Skip 2-character hex-like fragments (e.g., '5d', 'e9', 'a1')
-            # Catches: '06', '0d', '0e', '4a', '56', '57', '63', 'fb', etc.
-            if len(t) == 2 and any(char.isdigit() for char in t):
-                continue
-            
-            # C. Skip fragments that are typical Pandoc-mangled dates
-            # Catches: '000z', '10t00'
-            if t in ["000z", "10t00"]:
                 continue
 
             filtered_tokens.append(t)
 
         token_set = set(filtered_tokens)
         
-        # 2. Optimized Branding Mapping
+        # Optimized Branding Mapping: 
+        # Convert "{longhorn-product-name}" back to "storage" for comparison
         brand_map = {v.lower(): k.lower() for k, v in self.branding.items()}
+        
+        # We also need to strip the curly braces from the keys in brand_map 
+        # so they match the tokens found by the NLP.
         final_set = set()
         for word in token_set:
-            final_set.add(brand_map.get(word, word))
-            
+            # Check if the word (like 'longhorn-product-name') is in our branding values
+            cleaned_word = word.strip("{}")
+            found = False
+            for attr_val, raw_text in self.branding.items():
+                if cleaned_word in attr_val.lower():
+                    # Add the raw words from 'SUSE Storage' to the set
+                    for part in raw_text.lower().split():
+                        if part not in self.stop_words:
+                            final_set.add(part)
+                    found = True
+                    break
+            if not found:
+                final_set.add(word)
+                
         return final_set
 
     def compare(self, md_content: str, adoc_content: str, md_path: str, adoc_path: str) -> ValidationReport:
-        """Performs a deep comparison between MD source and ADOC result."""
+        """Performs a deep comparison between MD source and ADOC result.
+        
+        Args:
+            md_content (str): The raw content of the Markdown file.
+            adoc_content (str): The raw content of the AsciiDoc file.
+            md_path (str): The file path of the Markdown source (used for reporting).
+            adoc_path (str): The file path of the AsciiDoc target (used for reporting).
+        
+        Returns:
+            ValidationReport: A report object containing the results of the comparison, including coverage percentage and any detected issues.
+        """
         # Initialize the report with file paths
         report = ValidationReport(source_path=md_path, target_path=adoc_path)
 
@@ -165,7 +217,6 @@ class ParityValidator:
         coverage = round((len(intersection) / len(md_words)) * 100, 1)
         report.coverage = coverage
 
-        # --- UPDATED LOGIC ---
         # Only log to disk if we actually flag an issue (below 98%)
         # This keeps your data/audit-logs/ folder clean!
         if coverage < 98.0:
@@ -201,7 +252,16 @@ class ParityValidator:
         return report
 
     def _write_detailed_log(self, source_path: str, data: Dict):
-        """Saves exhaustive validation details to a JSON file."""
+        """Saves exhaustive validation details to a JSON file.
+        
+        Args:
+            source_path (str): The file path of the Markdown source, used to name the log file.
+            data (Dict): A dictionary containing all relevant details of the validation for this file,
+            including coverage, missing tokens, and any other metrics or samples deemed useful for debugging.
+
+        Returns:
+            None: This function writes data to disk and does not return anything.
+        """
         # Use the stem of the filename to create the log entry
         log_file = self.log_dir / f"{Path(source_path).stem}.json"
 
@@ -210,7 +270,16 @@ class ParityValidator:
             json.dump(data, f, indent=2)
 
     def _extract_headings(self, text: str, is_adoc: bool) -> List[Tuple[int, str]]:
-        """Returns a list of (level, text) tuples for all headings."""
+        """Returns a list of (level, text) tuples for all headings.
+        
+        Args:
+            text (str): The raw content of the file from which to extract headings.
+            is_adoc (bool): Flag to indicate if the text is from an AsciiDoc
+            file, which has different syntax rules for headings than Markdown.
+
+        Returns:
+            List[Tuple[int, str]]: A list of tuples where each tuple contains the heading level (e.g., 1 for H1, 2 for H2) and the heading text.
+        """
         # This is a lightweight structural check to ensure major sections are present.
         headings = []
         # We only check for the presence and count of headings, not their exact text, to avoid false positives from minor wording changes.
@@ -225,7 +294,16 @@ class ParityValidator:
         return headings
 
     def _extract_code_blocks(self, text: str, is_adoc: bool) -> List[str]:
-        """Extracts the interior content of code blocks for logic-check."""
+        """Extracts the interior content of code blocks for logic-check.
+        
+        Args:
+            text (str): The raw content of the file from which to extract code blocks.
+            is_adoc (bool): Flag to indicate if the text is from an AsciiDoc
+            file, which has different syntax rules for code blocks than Markdown.
+
+        Returns:
+            List[str]: A list of strings, each representing the interior content of a code block.
+        """
         if is_adoc:
             # AsciiDoc blocks: ---- or [source] blocks
             return re.findall(r"^-{4,}\n(.*?)\n-{4,}", text, re.S | re.M)
@@ -235,8 +313,16 @@ class ParityValidator:
 
     def _check_structural_integrity(self, report: ValidationReport, 
                                    md_text: str, adoc_text: str):
-        """Analyzes headings and code blocks with performance protection."""
+        """Analyzes headings and code blocks with performance protection.
         
+        Args:
+            report (ValidationReport): The report object to which any detected issues will be added.
+            md_text (str): The raw content of the Markdown file.
+            adoc_text (str): The raw content of the AsciiDoc file.
+        
+        Returns:
+            None: This function updates the report object in place and does not return anything.
+        """
         # 1. Heading Check (Existing logic is fine, regex is fast here)
         md_h = self._extract_headings(md_text, is_adoc=False)
         adoc_h = self._extract_headings(adoc_text, is_adoc=True)
@@ -278,7 +364,16 @@ class ParityValidator:
                         ))
 
     def _extract_table_footprint(self, text: str, is_adoc: bool) -> List[int]:
-        """Returns a list where each entry is the number of columns in a table."""
+        """Returns a list where each entry is the number of columns in a table.
+        
+        Args:
+            text (str): The raw content of the file from which to extract table footprints.
+            is_adoc (bool): Flag to indicate if the text is from an AsciiDoc file, which has different syntax rules for tables than Markdown.
+
+        Returns:
+            List[int]: A list of integers where each integer represents the number of columns in a detected table.
+            This serves as a "footprint" to compare table structures between Markdown and AsciiDoc.  
+        """
         # This is a heuristic to check if tables are being lost or significantly altered.
         footprints = []
         
@@ -306,6 +401,14 @@ class ParityValidator:
         """
         Walks the input directory and matches every Markdown file 
         with its converted counterpart in the output directory.
+
+        Args:
+            input_dir (Path): The directory containing the original Markdown files.
+            output_dir (Path): The directory containing the converted AsciiDoc files.
+        
+        Returns:
+            List[ValidationReport]: A list of ValidationReport objects, each representing the results of validating a single file pair.
+            This includes coverage metrics and any detected issues for each file.
         """
         # For each Markdown file, we generate a ValidationReport that includes:
         reports = []
@@ -358,8 +461,15 @@ class ParityValidator:
         
         return reports
 
-    def render_terminal_report(self, reports: List[ValidationReport]):
-        """Prints a high-visibility summary of the validation results."""
+    def render_terminal_report(self, reports: List[ValidationReport]) -> None:
+        """Prints a high-visibility summary of the validation results.
+        
+        Args:
+            reports (List[ValidationReport]): A list of ValidationReport objects to summarize.
+
+        Returns:
+            None: This function prints the report to the terminal and does not return anything. 
+        """
         # We summarize the results with clear counts of total files, passes, and failures. 
         # For any files that failed validation, we provide a concise breakdown of the issues detected, categorized by severity and type. 
         # We also highlight where detailed logs can be found for further investigation.
