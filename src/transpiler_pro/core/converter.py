@@ -37,9 +37,36 @@ class DocConverter:
         self.discovered_title = None
         self.used_ids: Set[str] = set()
         self.protected_json: List[str] = []
+        # --- SUSE Branding Attribute Map ---
+        # Format: "Raw Text to Find": "{attribute-variable-name}"
+        # ORDER MATTERS: Longest strings first to prevent partial matching.
+        self.attribute_map = {
+            "SUSE® Rancher Prime: Admission Policy Manager": "{kubewarden-product-name}",
+            "SUSE® Rancher Prime: Continuous Delivery": "{fleet-product-name}",
+            "SUSE® Rancher Prime: OS Manager": "{elemental-product-name}",
+            "SUSE® Rancher Prime: Cluster API": "{turtles-product-name}",
+            "SUSE® Rancher Prime: K3s": "{k3s-product-name}",
+            "SUSE® Rancher Prime: RKE2": "{rke2-product-name}",
+            "SUSE® Rancher Prime": "{rancher-product-name-tm}",
+            "SUSE Rancher Prime": "{rancher-product-name}",
+            "SUSE® Virtualization": "{harvester-product-name-tm}",
+            "SUSE Virtualization": "{harvester-product-name}",
+            "SUSE® Storage": "{longhorn-product-name-tm}",
+            "SUSE Storage": "{longhorn-product-name}",
+            "SUSE® Security": "{neuvector-product-name}",
+            "SUSE® Losant": "{losant-product-name}",
+            "SUSE Losant": "{losant-product-name}"
+        }
 
     def _load_project_config(self) -> Dict[str, Any]:
-        """Loads the [tool.transpiler-pro] configuration block."""
+        """Loads the [tool.transpiler-pro] configuration block.
+        
+        Args:
+            config_path (Path): Path to the pyproject.toml file.
+            
+        Returns:
+            Dict: The configuration dictionary for transpiler-pro.
+        """
         if not self.config_path.exists():
             return {}
         try:
@@ -49,10 +76,40 @@ class DocConverter:
         except Exception:
             return {}
     
+    def _apply_global_attributes(self, text: str) -> str:
+        """
+        Replaces raw product names with Antora attributes.
+        Uses negative lookbehind/lookahead to protect URLs and file paths.
+
+        Args:
+            text (str): The input string to process.
+
+        Returns:
+            str: The text with product names replaced by attributes.
+        """
+        # Guard clause for empty text to avoid unnecessary processing.
+        if not text:
+            return text
+        
+        # We iterate through the attribute map and apply replacements. 
+        # The regex ensures we only replace standalone occurrences of the product names, not when they are part of URLs or file paths.
+        for raw_name, attr in self.attribute_map.items():
+            # Refined Regex: Protects URLs (/:) but allows trailing periods in sentences
+            pattern = rf"(?<![/:])\b{re.escape(raw_name)}\b"
+            text = re.sub(pattern, attr, text)
+
+        return text
+    
     def _slugify(self, text: str) -> str:
         """
         Converts a heading title into a SEO-friendly, unique ID.
         Example: "Access Keys & Security" -> "access-keys-security"
+
+        Args:
+            text (str): The raw heading text.
+
+        Returns:
+            str: A slugified version suitable for use as an anchor ID.
         """
         # 1. Lowercase and strip technical syntax and HTML/JSX tags
         slug = text.lower()
@@ -162,17 +219,28 @@ class DocConverter:
         Order of Operations:
         1. Reset ID tracker and prioritize H1 Document Title.
         2. Process H2-H6 headings with collision avoidance.
-        3. Construct the Metadata Header.
-        4. Restore shielded blocks and clean Pandoc noise.
-        5. Apply Antora-specific normalization (Xrefs & Image Scaling).
+        3. Apply Global Branding Attributes to body prose.
+        4. Construct the Metadata Header.
+        5. Restore shielded blocks and clean Pandoc noise.
+        6. Apply Antora-specific normalization (Xrefs & Image Scaling).
+
+        Args:
+            content (str): The raw AsciiDoc output from Pandoc.
+        
+        Returns:
+            str: The finalized AsciiDoc content ready for Antora.
         """
         # --- 1. INITIALIZATION & H1 PRIORITY ---
         self.used_ids = set() 
         today = datetime.now().strftime("%Y-%m-%d")
-        
-        # Ensure the Document Title gets the first/cleanest slug
+
+        # A. Create the ID Slug from the RAW title BEFORE branding
+        # This prevents ID leakage (e.g., [#suse-storage] instead of [#{longhorn-product-name}])
+        title_slug = self._slugify(self.discovered_title or "untitled")
+
+        # B. Prepare the title for DISPLAY only
         title_text = self.discovered_title or "Untitled Document"
-        title_slug = self._slugify(title_text)
+        title_text = self._apply_global_attributes(title_text)
 
         # --- 2. HEADING SLUGGING & NORMALIZATION ---
         def heading_anchor_logic(match):
@@ -193,10 +261,13 @@ class DocConverter:
                     final_id = f"{base_id}-{counter}"
                     counter += 1
                 self.used_ids.add(final_id)
+                # Apply branding to display title after ID is locked
+                display_title = self._apply_global_attributes(display_title)
             else:
-                # Regular heading: slugify title and handle duplicates
+                # Regular heading: slugify RAW title first for clean SEO
                 final_id = self._slugify(raw_title)
-                display_title = raw_title
+                # Then brand the display title for the reader
+                display_title = self._apply_global_attributes(raw_title)
 
             # We return the heading with an explicit anchor to ensure URL stability, even if the title text changes in the future.            
             return f"\n[#{final_id}]\n{level_chars} {display_title}"
@@ -207,6 +278,9 @@ class DocConverter:
         # Heading cleanup
         content = re.sub(r'IDSHIELDSTART.*?IDSHIELDEND', '', content)
         content = re.sub(r'^={6,}\s+', r'===== ', content, flags=re.M)
+
+        # C. Apply Global Attributes to the body content AFTER headings are locked
+        content = self._apply_global_attributes(content)
 
         # --- 3. CONSTRUCT HEADER BLOCK ---
         header_lines = [
@@ -238,6 +312,7 @@ class DocConverter:
         content = content.replace("++_++", "_").replace("++{++", "{").replace("++}++", "}")
         content = content.replace("++{{++", "{{").replace("++}}++", "}}")
         content = content.replace("++<++", "<").replace("++>++", ">")
+        content = content.replace("++*++", "*").replace("++_++", "_")
 
         # Restore video embeds
         content = re.sub(r'VIDEOTOKEN([a-zA-Z0-9_-]+)', r'video::\1[youtube]', content)
@@ -284,12 +359,13 @@ class DocConverter:
                     content = re.sub(regex, replacement, content, flags=re.S)
 
         # --- 7. ANTORA NORMALIZATION (Xrefs & Images) ---
-        # Image path cleanup
-        content = re.sub(r'image::/images/(.*?)\[', r'image::\1[', content)
+        # Image path cleanup: Strip /images/ and ensure double colon '::' for block images
+        content = re.sub(r'image:/?images/(.*?)\[', r'image::\1[', content)
 
-        # SENIOR REQ: Image Scaling for PDF/DAPS
+        # Ensure scaling is applied even if the path was already clean
         content = re.sub(r'image::([^\[]+)\[\]', r'image::\1[pdfwidth=100%,scalewidth=100%]', content)
         
+        # Antora Xref Normalization: Convert Pandoc's link/xref syntax into clean Antora xrefs.
         def antora_xref_logic(m: Match) -> str:
             raw_path = m.group(1) or ""
             anchor = m.group(2) or ""
@@ -306,6 +382,10 @@ class DocConverter:
         content = re.sub(r'(?:link:|xref:)(?:\+\+)?([^\[\s#\+]+)?(#[^\[\s\+]+)?(?:\+\+)?', antora_xref_logic, content)
 
         # --- 8. FINAL CLEANUP ---
+        # Ensure a blank line before lists (both * and .) to prevent squashing
+        # Matches a non-newline character followed by a single newline and a list marker
+        content = re.sub(r'([^\n])\n([*.])\s', r'\1\n\n\2 ', content)
+
         content = re.sub(r'\[source,mermaid\]\n----(.*?)----', r'[mermaid]\n....\1....', content, flags=re.DOTALL)
         content = content.replace("SHIELDADMONSTARTtabs", "[tabs]\n====")
         content = content.replace("SHIELDADMONEND", "====")
@@ -320,6 +400,9 @@ class DocConverter:
         Args:
             input_path (Path): Source Markdown file.
             output_path (Path): Destination for the raw AsciiDoc.
+        
+        Returns:
+            None: Writes the converted content to output_path.
         """
         self.metadata = {}
         self.discovered_title = None
