@@ -2,7 +2,9 @@
     "automated_fixes": {
         "suse": "SUSE",
         "wifi": "Wi-Fi",
-        "ip": "IP"
+        "ip": "IP",
+        "e-mail": "email",
+        "email": "email"
     },
     "ignored_rules": [
         "asciidoc.NoWidthForFigures",

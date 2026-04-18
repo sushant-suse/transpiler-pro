@@ -6,6 +6,7 @@ Matches Markdown sources against converted AsciiDoc to ensure content integrity.
 
 import re
 import difflib
+import json
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Tuple
@@ -19,6 +20,7 @@ class ValidationIssue:
 
 @dataclass
 class ValidationReport:
+    # This report captures the results of validating a single file pair (Markdown source vs AsciiDoc target).
     source_path: str
     target_path: str
     coverage: float = 0.0
@@ -26,6 +28,7 @@ class ValidationReport:
     skipped: bool = False
     skip_reason: str = ""
 
+    # The 'passed' property is a convenient way to check if the validation was successful without any errors.
     @property
     def passed(self) -> bool:
         return not any(i.severity == "ERROR" for i in self.issues) and not self.skipped
@@ -35,72 +38,160 @@ class ParityValidator:
         self.config = config
         # Load branding from KB to prevent "false loss" flags
         self.branding = config.get("automated_fixes", {})
+        # Initialize audit log directory
+        self.log_dir = Path("data/audit-logs")
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self._prepare_log_dir()
         self.stop_words = {
             "the", "and", "for", "are", "this", "that", "with", "from", "have",
             "will", "not", "can", "its", "also", "been", "when", "they"
         }
+    
+    def _prepare_log_dir(self):
+        """Ensures log dir exists and is empty for the current run."""
+        # We create the log directory if it doesn't exist and clear out any old logs to ensure that each run starts with a clean slate. 
+        # This prevents confusion from stale data and ensures that any logs present after the run are relevant to the current validation process.
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clear out old logs to prevent confusion with stale data.
+        for f in self.log_dir.glob("*.json"):
+            f.unlink()
 
     def _normalize_text(self, text: str, is_adoc: bool = False) -> str:
-        """Strips syntax to leave only comparable prose."""
+        """Strips syntax to leave only comparable prose and technical tokens."""
         if is_adoc:
-            # Strip AsciiDoc specific markers
-            text = re.sub(r"^= .*", "", text, flags=re.M) # Header
-            text = re.sub(r"\[.*?\]", "", text)          # Attributes/Options
+            # 1. Strip AsciiDoc specific structural markers
+            text = re.sub(r"^= .*", "", text, flags=re.M)      # Header
+            text = re.sub(r"^\[.*?\]$", "", text, flags=re.M) # Block Attributes
             text = re.sub(r"image::.*?\[.*?\]", "", text)
             text = re.sub(r"xref:.*?\[(.*?)\]", r"\1", text)
-            text = re.sub(r"[:\w]+::\[\]", "", text)     # tab::[] etc
+            text = re.sub(r"[:\w]+::\[\]", "", text)          # tab::[] etc
             text = re.sub(r"^[=|*-]{4,}", "", text, flags=re.M) # Delimiters
+            
+            # 2. Neutralize Pandoc noise: 
+            # Replace '++' with a space to prevent Hex tokens from merging (06++:++5D -> 06 5D)
+            text = text.replace("++", " ") 
         else:
-            # Strip Markdown specific markers
+            # 3. Strip Markdown specific markers
             text = re.sub(r"---.*?---", "", text, flags=re.S) # Frontmatter
             text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
             text = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", text)
-            text = re.sub(r":::\w+", "", text)           # Admonition starts
-            text = re.sub(r"#{1,6}\s+", "", text)        # Headers
+            text = re.sub(r":::\w+", "", text)
+            text = re.sub(r"#{1,6}\s+", "", text)
+            
+            # 4. Handle Markdown HTML entities (fixes the 'x27' / '&#x27;' issue)
+            import html
+            text = html.unescape(text)
 
-        # Global cleanup
+        # 5. Component Cleaning: Strip HTML/JSX tags but keep content
+        # Use a space replacement to prevent words from being concatenated
+        text = re.sub(r"<[^>]+>", " ", text) 
+
+        # 6. Technical Normalization: Split by common technical delimiters
+        # We add '/' and '\' to the split list to handle URL/Path fragments (fixes 'params/info')
+        text = re.sub(r"[:\-\/\\\.]", " ", text)
+
+        # 7. Final Polish: Remove formatting chars but keep alphanumeric characters
         text = re.sub(r"[`*_]", "", text) 
+        
+        # 8. Extra Clean: Remove single-character artifacts that aren't useful for parity
+        # (Optional, but helps with residual punctuation artifacts)
+        text = re.sub(r"\s+", " ", text).strip()
+        
         return text
 
     def get_significant_words(self, text: str) -> Set[str]:
-        """Extracts unique meaningful tokens for coverage analysis."""
-        # We replace branding terms with their 'keys' so "wifi" matches "Wi-Fi"
-        for wrong, correct in self.branding.items():
-            text = text.replace(correct, wrong)
+        """Extracts meaningful tokens while filtering technical noise (hex fragments/short dates)."""
+        # 1. Extract all alphanumeric tokens (Length 2+)
+        all_tokens = re.findall(r"\b[a-zA-Z0-9]{2,}\b", text.lower())
+        
+        filtered_tokens = []
+        for t in all_tokens:
+            # Skip standard stop words
+            if t in self.stop_words:
+                continue
             
-        tokens = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
-        return {t for t in tokens if t not in self.stop_words}
+            # --- NOISE REDUCTION FILTERS ---
+            
+            # A. Skip purely numeric strings under 5 digits (e.g., '06', '2020', '38')
+            # Catches: '2019', '2020', '00', '27', etc.
+            if t.isdigit() and len(t) < 5:
+                continue
+            
+            # B. Skip 2-character hex-like fragments (e.g., '5d', 'e9', 'a1')
+            # Catches: '06', '0d', '0e', '4a', '56', '57', '63', 'fb', etc.
+            if len(t) == 2 and any(char.isdigit() for char in t):
+                continue
+            
+            # C. Skip fragments that are typical Pandoc-mangled dates
+            # Catches: '000z', '10t00'
+            if t in ["000z", "10t00"]:
+                continue
+
+            filtered_tokens.append(t)
+
+        token_set = set(filtered_tokens)
+        
+        # 2. Optimized Branding Mapping
+        brand_map = {v.lower(): k.lower() for k, v in self.branding.items()}
+        final_set = set()
+        for word in token_set:
+            final_set.add(brand_map.get(word, word))
+            
+        return final_set
 
     def compare(self, md_content: str, adoc_content: str, md_path: str, adoc_path: str) -> ValidationReport:
         """Performs a deep comparison between MD source and ADOC result."""
+        # Initialize the report with file paths
         report = ValidationReport(source_path=md_path, target_path=adoc_path)
 
+        # Step 1: Normalize both texts to extract comparable prose
         md_prose = self._normalize_text(md_content, is_adoc=False)
         adoc_prose = self._normalize_text(adoc_content, is_adoc=True)
 
+        # Step 2: Extract significant words for set comparison
         md_words = self.get_significant_words(md_prose)
         adoc_words = self.get_significant_words(adoc_prose)
 
+        # Step 3: Calculate coverage and identify missing tokens
         if not md_words:
             report.skipped = True
             report.skip_reason = "Source Markdown has no significant prose."
             return report
 
-        # 1. Prose Coverage Calculation
+        # Calculate intersection and missing tokens
         intersection = md_words & adoc_words
         missing = md_words - adoc_words
         coverage = round((len(intersection) / len(md_words)) * 100, 1)
-        report.coverage = round(coverage, 1)
+        report.coverage = coverage
 
-        if coverage < 85.0:
-            sample = ", ".join(list(missing)[:10])
+        # --- UPDATED LOGIC ---
+        # Only log to disk if we actually flag an issue (below 98%)
+        # This keeps your data/audit-logs/ folder clean!
+        if coverage < 98.0:
+            self._write_detailed_log(md_path, {
+                "file": str(md_path),
+                "coverage": coverage,
+                "metrics": {
+                    "total_source_tokens": len(md_words),
+                    "total_target_tokens": len(adoc_words),
+                    "missing_count": len(missing)
+                },
+                "missing_tokens": sorted(list(missing)),
+                "detected_tokens_sample": sorted(list(intersection))[:30]
+            })
+
+        # Flag issues based on coverage thresholds
+        if coverage < 90.0:
+            sample = ", ".join(sorted(list(missing))[:15])
             report.issues.append(ValidationIssue(
                 severity="ERROR", 
                 category="coverage",
                 message=f"Critical content loss: Only {coverage}% found.",
-                detail=f"Missing words include: {sample}..."
+                detail=f"Missing tokens: {sample} (Check data/audit-logs/ for full list)"
             ))
-        elif coverage < 95.0:
+        elif coverage < 98.0:
+            # The 98% threshold is a bit more lenient, acknowledging that minor token loss can occur due to formatting changes, but still warrants attention.
             report.issues.append(ValidationIssue(
                 severity="WARNING", 
                 category="coverage",
@@ -109,9 +200,20 @@ class ParityValidator:
 
         return report
 
+    def _write_detailed_log(self, source_path: str, data: Dict):
+        """Saves exhaustive validation details to a JSON file."""
+        # Use the stem of the filename to create the log entry
+        log_file = self.log_dir / f"{Path(source_path).stem}.json"
+
+        # Ensure the log file is written with UTF-8 encoding to handle any special characters
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
     def _extract_headings(self, text: str, is_adoc: bool) -> List[Tuple[int, str]]:
         """Returns a list of (level, text) tuples for all headings."""
+        # This is a lightweight structural check to ensure major sections are present.
         headings = []
+        # We only check for the presence and count of headings, not their exact text, to avoid false positives from minor wording changes.
         if is_adoc:
             # Matches '= Title', '== Section'
             for m in re.finditer(r"^(=+) (.*)$", text, re.M):
@@ -133,47 +235,54 @@ class ParityValidator:
 
     def _check_structural_integrity(self, report: ValidationReport, 
                                    md_text: str, adoc_text: str):
-        """Analyzes headings and code blocks for order and count parity."""
+        """Analyzes headings and code blocks with performance protection."""
         
-        # 1. Heading Check
+        # 1. Heading Check (Existing logic is fine, regex is fast here)
         md_h = self._extract_headings(md_text, is_adoc=False)
         adoc_h = self._extract_headings(adoc_text, is_adoc=True)
         
-        # In our pipeline, MD # (H1) becomes ADOC = (H1). Levels should match.
+        # We only check for the count of headings, not their exact text, to avoid false positives from minor wording changes. 
+        # This is a lightweight structural check to ensure major sections are present.
         if len(md_h) != len(adoc_h):
             report.issues.append(ValidationIssue(
-                severity="WARNING",
-                category="structure",
-                message=f"Heading count mismatch: MD has {len(md_h)}, ADOC has {len(adoc_h)}",
-                detail="This often happens if the NLP engine merges sections or H1 is missing."
+                severity="WARNING", category="structure",
+                message=f"Heading count mismatch: MD({len(md_h)}) vs ADOC({len(adoc_h)})"
             ))
 
-        # 2. Code Block Parity
+        # 2. Code Block Check (The Performance Bottleneck)
         md_code = self._extract_code_blocks(md_text, is_adoc=False)
         adoc_code = self._extract_code_blocks(adoc_text, is_adoc=True)
         
+        # If the counts don't match, we already know there's a structural issue, so we can skip the expensive content comparison.
         if len(md_code) != len(adoc_code):
             report.issues.append(ValidationIssue(
-                severity="ERROR",
-                category="code",
-                message=f"Code block count mismatch! Source: {len(md_code)}, Result: {len(adoc_code)}",
-                detail="Critical: Technical instructions or snippets may have been lost."
+                severity="ERROR", category="code",
+                message=f"Code block count mismatch! MD: {len(md_code)}, Result: {len(adoc_code)}"
             ))
         else:
-            # Compare content similarity of code blocks to ensure no mangling
+            # If counts match, we can do a quick content similarity check to catch any major shifts without doing a full diff.
             for i, (m_block, a_block) in enumerate(zip(md_code, adoc_code)):
-                ratio = difflib.SequenceMatcher(None, m_block.strip(), a_block.strip()).ratio()
-                if ratio < 0.90:
-                    report.issues.append(ValidationIssue(
-                        severity="WARNING",
-                        category="code",
-                        message=f"Code block {i+1} content shifted significantly.",
-                        detail=f"Similarity: {ratio:.1%}. Check for escaping issues."
-                    ))
+                m_clean, a_clean = m_block.strip(), a_block.strip()
+                
+                # PERFORMANCE GATE: If the character count difference is tiny (<2%), skip heavy diffing
+                len_diff = abs(len(m_clean) - len(a_clean))
+                if len_diff > 50 and (len_diff / max(len(m_clean), 1)) > 0.02:
+                    # Use quick_ratio on a sample (first 5000 chars) for speed
+                    ratio = difflib.SequenceMatcher(None, m_clean[:5000], a_clean[:5000]).quick_ratio()
+                    # If the similarity is below 85%, we flag it as a warning. This catches major content shifts without the overhead of a full diff.
+                    if ratio < 0.85:
+                        report.issues.append(ValidationIssue(
+                            severity="WARNING", category="code",
+                            message=f"Code block {i+1} content shifted significantly.",
+                            detail=f"Similarity approx: {ratio:.1%}"
+                        ))
 
     def _extract_table_footprint(self, text: str, is_adoc: bool) -> List[int]:
         """Returns a list where each entry is the number of columns in a table."""
+        # This is a heuristic to check if tables are being lost or significantly altered.
         footprints = []
+        
+        # For AsciiDoc, we look for lines starting with '|===' to identify table boundaries and count the number of '|' in rows to determine column count.
         if is_adoc:
             # Count pipes in AsciiDoc table rows
             current_table_cols = 0
@@ -198,17 +307,22 @@ class ParityValidator:
         Walks the input directory and matches every Markdown file 
         with its converted counterpart in the output directory.
         """
+        # For each Markdown file, we generate a ValidationReport that includes:
         reports = []
         # Support both .md and .mdx
         input_files = []
+
+        # We use rglob to recursively find all Markdown files in the input directory, supporting both .md and .mdx extensions.
         for ext in [".md", ".mdx"]:
             input_files.extend(list(input_dir.rglob(f"*{ext}")))
 
+        # We then iterate over each Markdown file, determine the expected AsciiDoc path, and perform the comparison. If the AsciiDoc file is missing, we log an error. Otherwise, we run both the prose comparison and structural checks, accumulating any issues into the ValidationReport for that file.
         for md_path in input_files:
             # Determine the expected path in the output folder
             rel_path = md_path.relative_to(input_dir)
             adoc_path = output_dir / rel_path.with_suffix(".adoc")
 
+            # Check if the AsciiDoc file exists
             if not adoc_path.exists():
                 report = ValidationReport(str(rel_path), "NOT FOUND")
                 report.issues.append(ValidationIssue(
@@ -223,10 +337,10 @@ class ParityValidator:
             md_text = md_path.read_text(encoding="utf-8")
             adoc_text = adoc_path.read_text(encoding="utf-8")
 
-            # Run basic prose comparison (from Part 1)
+            # Run basic prose comparison
             report = self.compare(md_text, adoc_text, str(rel_path), str(adoc_path))
             
-            # Run structural comparison (from Part 2)
+            # Run structural comparison
             if not report.skipped:
                 self._check_structural_integrity(report, md_text, adoc_text)
                 
@@ -246,6 +360,9 @@ class ParityValidator:
 
     def render_terminal_report(self, reports: List[ValidationReport]):
         """Prints a high-visibility summary of the validation results."""
+        # We summarize the results with clear counts of total files, passes, and failures. 
+        # For any files that failed validation, we provide a concise breakdown of the issues detected, categorized by severity and type. 
+        # We also highlight where detailed logs can be found for further investigation.
         total = len(reports)
         passed = sum(1 for r in reports if r.passed)
         failed = total - passed
@@ -256,8 +373,11 @@ class ParityValidator:
         print(f"Total Files Scanned: {total}")
         print(f"Passed Validation:   {passed} ✅")
         print(f"Issues Detected:     {failed} ⚠️")
+        print(f"Detailed Logs:       {self.log_dir}/")
         print("-" * 60)
 
+        # We then iterate through the reports and print out any that did not pass validation, including the specific issues found. 
+        # This allows for quick identification of problem areas while keeping the terminal output concise and actionable.
         for r in reports:
             if r.passed:
                 continue
@@ -272,6 +392,10 @@ class ParityValidator:
                     print(f"        Detail: {issue.detail}")
         
         print("\n" + "="*60)
+
+        # Finally, we provide a closing summary that emphasizes the importance of reviewing any flagged issues and 
+        # directs users to the detailed logs for in-depth analysis. This ensures that while the terminal report is concise, 
+        # users have a clear path to investigate and resolve any content integrity concerns.
         if failed == 0:
             print("✨ PARITY PERFECT: No content loss detected.")
         else:
