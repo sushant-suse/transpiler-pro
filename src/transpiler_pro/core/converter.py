@@ -35,6 +35,7 @@ class DocConverter:
         self.conv_cfg = self.config.get("conversions", {})
         self.metadata: Dict[str, Any] = {}
         self.discovered_title = None
+        self.used_ids: Set[str] = set()
 
     def _load_project_config(self) -> Dict[str, Any]:
         """Loads the [tool.transpiler-pro] configuration block."""
@@ -46,6 +47,30 @@ class DocConverter:
                 return tomllib.load(f).get("tool", {}).get("transpiler-pro", {})
         except Exception:
             return {}
+    
+    def _slugify(self, text: str) -> str:
+        """
+        Converts a heading title into a SEO-friendly, unique ID.
+        Example: "Access Keys & Security" -> "access-keys-security"
+        """
+        # 1. Lowercase and strip technical syntax (like xrefs or inline code)
+        slug = text.lower()
+        slug = re.sub(r'\{#.*?\}', '', slug) # Remove existing MD IDs
+        slug = re.sub(r'[^a-z0-9\s-]', '', slug) # Remove special chars
+        
+        # 2. Replace spaces/multiple dashes with a single dash
+        slug = re.sub(r'[\s_]+', '-', slug).strip('-')
+        
+        # 3. Handle uniqueness within the document
+        base_slug = slug or "section"
+        final_slug = base_slug
+        counter = 1
+        while final_slug in self.used_ids:
+            final_slug = f"{base_slug}-{counter}"
+            counter += 1
+        
+        self.used_ids.add(final_slug)
+        return final_slug
 
     def pre_process_markdown(self, content: str) -> str:
         """
@@ -59,6 +84,7 @@ class DocConverter:
         """
         self.metadata = {}
         self.discovered_title = None
+        self.used_ids = set()
 
         # --- 1. CODE BLOCK SHIELDING ---
         # We protect '#' characters inside code blocks so the Title Scavenger 
@@ -110,6 +136,9 @@ class DocConverter:
             else:
                 content = re.sub(regex, replacement, content, flags=re.S)
         
+        # Protect existing Markdown IDs so Pandoc doesn't mangle curly braces
+        content = re.sub(r'\{#(.*?)\}', r'IDSHIELDSTART\1IDSHIELDEND', content)
+
         return content
 
     def post_process_asciidoc(self, content: str) -> str:
@@ -122,6 +151,32 @@ class DocConverter:
         3. Normalizing cross-references (xrefs) for the Antora site generator.
         4. Constructing the standard AsciiDoc Header.
         """
+        # --- HEADING SLUGGING & NORMALIZATION ---
+        def heading_anchor_logic(match):
+            level_chars = match.group(1)
+            raw_title = match.group(2).strip()
+            
+            # Check if there is an existing shielded ID
+            custom_id_match = re.search(r'IDSHIELDSTART(.*?)IDSHIELDEND', raw_title)
+            
+            if custom_id_match:
+                final_id = custom_id_match.group(1)
+                # Remove the shield from the title text
+                display_title = raw_title.replace(custom_id_match.group(0), "").strip()
+            else:
+                final_id = self._slugify(raw_title)
+                display_title = raw_title
+            
+            # Add a leading newline for spacing, then the anchor, then the heading
+            return f"\n[#{final_id}]\n{level_chars} {display_title}"
+
+        # Regex: find any heading level 2-6 (AsciiDoc style '==')
+        # We process this before any other cleanup to ensure we catch raw Pandoc output
+        content = re.sub(r'\n(={2,6})\s+(.*)', heading_anchor_logic, content)
+        
+        # Final cleanup for any leftover shields
+        content = re.sub(r'IDSHIELDSTART.*?IDSHIELDEND', '', content)
+
         # --- 1. HEADING NORMALIZATION ---
         # Ensure heading levels are consistent (capping at level 5).
         content = re.sub(r'^={6,}\s+', r'===== ', content, flags=re.M)
@@ -196,7 +251,7 @@ class DocConverter:
             # Normalize anchors to AsciiDoc style (lowercase with underscores)
             cl_anchor = ""
             if anchor:
-                cl_anchor = "#_" + anchor.replace("#", "").lower().replace("-", "_")
+                cl_anchor = "#" + anchor.replace("#", "").lower().replace("-", "-")
             return f"xref:{path}{cl_anchor}"
 
         # Matches Markdown link syntax and Pandoc-converted AsciiDoc links
@@ -204,7 +259,17 @@ class DocConverter:
 
         # --- 6. FINAL HEADER CONSTRUCTION ---
         today = datetime.now().strftime("%Y-%m-%d")
-        header_lines = [f"= {self.discovered_title or 'Untitled Document'}"]
+        
+        # Generate the SEO-friendly slug for the main title
+        title_slug = self._slugify(self.discovered_title or "untitled")
+        
+        # Build the header with the ID and SEO attributes first
+        header_lines = [
+            f"[#{title_slug}]",
+            f"= {self.discovered_title or 'Untitled Document'}",
+            ":idprefix:",
+            ":idseparator: -"
+        ]
         
         # Inject YAML metadata as AsciiDoc attributes
         for key, value in self.metadata.items():
