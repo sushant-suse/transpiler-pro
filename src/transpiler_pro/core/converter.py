@@ -384,7 +384,7 @@ class DocConverter:
         # --- 8. FINAL CLEANUP ---
         # Ensure a blank line before lists (both * and .) to prevent squashing
         # Matches a non-newline character followed by a single newline and a list marker
-        content = re.sub(r'([^\n])\n([*.])\s', r'\1\n\n\2 ', content)
+        # content = re.sub(r'([^\n])\n([*.])\s', r'\1\n\n\2 ', content)
 
         content = re.sub(r'\[source,mermaid\]\n----(.*?)----', r'[mermaid]\n....\1....', content, flags=re.DOTALL)
         content = content.replace("SHIELDADMONSTARTtabs", "[tabs]\n====")
