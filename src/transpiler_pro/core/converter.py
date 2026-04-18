@@ -54,15 +54,16 @@ class DocConverter:
         Converts a heading title into a SEO-friendly, unique ID.
         Example: "Access Keys & Security" -> "access-keys-security"
         """
-        # 1. Lowercase and strip technical syntax (like xrefs or inline code)
+        # 1. Lowercase and strip technical syntax and HTML/JSX tags
         slug = text.lower()
+        slug = re.sub(r'<[^>]+>', '', slug) # Remove HTML tags
         slug = re.sub(r'\{#.*?\}', '', slug) # Remove existing MD IDs
         slug = re.sub(r'[^a-z0-9\s-]', '', slug) # Remove special chars
         
-        # 2. Replace spaces/multiple dashes with a single dash
-        slug = re.sub(r'[\s_]+', '-', slug).strip('-')
+        # 2. Replace spaces/multiple dashes/underscores with a single dash
+        slug = re.sub(r'[\s_/-]+', '-', slug).strip('-')
         
-        # 3. Handle uniqueness within the document
+        # 3. Handle uniqueness within the document (Collision Avoidance)
         base_slug = slug or "section"
         final_slug = base_slug
         counter = 1
@@ -157,59 +158,92 @@ class DocConverter:
     def post_process_asciidoc(self, content: str) -> str:
         """
         Finalizes the AsciiDoc output after Pandoc has finished.
-
-        This involves:
-        1. Restoring shielded blocks (Videos, Tabs, Collapsibles).
-        2. Promoting Markdown-style notes to AsciiDoc Admonition blocks.
-        3. Normalizing cross-references (xrefs) for the Antora site generator.
-        4. Constructing the standard AsciiDoc Header.
+        
+        Order of Operations:
+        1. Reset ID tracker and prioritize H1 Document Title.
+        2. Process H2-H6 headings with collision avoidance.
+        3. Construct the Metadata Header.
+        4. Restore shielded blocks and clean Pandoc noise.
+        5. Apply Antora-specific normalization (Xrefs & Image Scaling).
         """
-        # --- HEADING SLUGGING & NORMALIZATION ---
+        # --- 1. INITIALIZATION & H1 PRIORITY ---
+        self.used_ids = set() 
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        # Ensure the Document Title gets the first/cleanest slug
+        title_text = self.discovered_title or "Untitled Document"
+        title_slug = self._slugify(title_text)
+
+        # --- 2. HEADING SLUGGING & NORMALIZATION ---
         def heading_anchor_logic(match):
             level_chars = match.group(1)
             raw_title = match.group(2).strip()
             
-            # Check if there is an existing shielded ID
+            # Check for shielded custom IDs from Markdown (e.g., {#my-custom-id})
             custom_id_match = re.search(r'IDSHIELDSTART(.*?)IDSHIELDEND', raw_title)
             
             if custom_id_match:
-                final_id = custom_id_match.group(1)
-                # Remove the shield from the title text
+                base_id = custom_id_match.group(1)
                 display_title = raw_title.replace(custom_id_match.group(0), "").strip()
+                
+                # Collision avoidance even for custom IDs
+                final_id = base_id
+                counter = 1
+                while final_id in self.used_ids:
+                    final_id = f"{base_id}-{counter}"
+                    counter += 1
+                self.used_ids.add(final_id)
             else:
+                # Regular heading: slugify title and handle duplicates
                 final_id = self._slugify(raw_title)
                 display_title = raw_title
-            
-            # Add a leading newline for spacing, then the anchor, then the heading
+
+            # We return the heading with an explicit anchor to ensure URL stability, even if the title text changes in the future.            
             return f"\n[#{final_id}]\n{level_chars} {display_title}"
 
-        # Regex: find any heading level 2-6 (AsciiDoc style '==')
-        # We process this before any other cleanup to ensure we catch raw Pandoc output
+        # Transform H2-H6 levels (Pandoc's == syntax)
         content = re.sub(r'\n(={2,6})\s+(.*)', heading_anchor_logic, content)
         
-        # Final cleanup for any leftover shields
+        # Heading cleanup
         content = re.sub(r'IDSHIELDSTART.*?IDSHIELDEND', '', content)
-
-        # --- 1. HEADING NORMALIZATION ---
-        # Ensure heading levels are consistent (capping at level 5).
         content = re.sub(r'^={6,}\s+', r'===== ', content, flags=re.M)
 
-        # --- 2. MARKER RESTORATION ---
+        # --- 3. CONSTRUCT HEADER BLOCK ---
+        header_lines = [
+            f"[#{title_slug}]",
+            f"= {title_text}",
+            ":idprefix:",
+            ":idseparator: -"
+        ]
+        
+        # Inject YAML metadata
+        for key, value in self.metadata.items():
+            if key.lower() != "title":
+                header_lines.append(f":{key}: {value}")
+        
+        header_lines.append(f":revdate: {today}")
+        
+        # Add global Antora headers from config
+        antora_cfg = self.config.get("antora", {})
+        header_lines.extend(antora_cfg.get("headers", []))
+        header_block = "\n".join(header_lines) + "\n\n"
+
+        # --- 4. MARKER RESTORATION & CLEANUP ---
         # Restore JSON Components
         if hasattr(self, 'protected_json'):
             for i, original in enumerate(self.protected_json):
                 content = content.replace(f"JSONP{i}PROTECT", original)
 
-        # Clean up Pandoc "protection" artifacts in tags
+        # Clean Pandoc artifacts
         content = content.replace("++_++", "_").replace("++{++", "{").replace("++}++", "}")
         content = content.replace("++{{++", "{{").replace("++}}++", "}}")
         content = content.replace("++<++", "<").replace("++>++", ">")
 
+        # Restore video embeds
         content = re.sub(r'VIDEOTOKEN([a-zA-Z0-9_-]+)', r'video::\1[youtube]', content)
-        # Standardize smart quotes and ellipses
         content = content.replace('’', "'").replace('‘', "'").replace('“', '"').replace('”', '"').replace('…', '...')
 
-        # Apply cleanup regex from pyproject.toml
+        # Apply cleanup regex from config
         cleanup = self.conv_cfg.get("cleanup_regex", [])
         for c in cleanup:
             flags = re.M if c.get("flags") == "M" else 0
@@ -217,30 +251,25 @@ class DocConverter:
             replacement = c.get("replacement")
             
             if c.get("hook") == "uppercase_label":
-                def uppercase_hook(match: Match) -> str:
-                    label = match.group(1).upper() 
-                    body = match.group(2).strip()
-                    return f"[{label}]\n====\n{body}\n===="
+                def uppercase_hook(m: Match) -> str:
+                    return f"[{m.group(1).upper()}]\n====\n{m.group(2).strip()}\n===="
                 content = re.sub(regex, uppercase_hook, content, flags=flags)
             else:
                 content = re.sub(regex, replacement, content, flags=flags)
 
-        # --- 3. ADMONITION PROMOTION ---
-        # Converts phrases like "Note: content" or "*Warning:* content" into [NOTE] blocks.
-        def promote_admo(match: Match) -> str:
-            label = match.group(1).upper()
-            body = match.group(2).strip()
-            return f"[{label}]\n====\n{body}\n===="
+        # --- 5. ADMONITION PROMOTION ---
+        def promote_admo(m: Match) -> str:
+            return f"[{m.group(1).upper()}]\n====\n{m.group(2).strip()}\n===="
         
         content = re.sub(r'(?i)^\*?(Note|Warning|Tip|Caution|Important|IMPORTANT)[:]?\*?[:]?\s+(.*)$', promote_admo, content, flags=re.M)
 
-        # --- 4. DYNAMIC MARKER RESTORATION ---
+        # --- 6. DYNAMIC RESTORATIONS ---
         restorations = self.conv_cfg.get("restoration_patterns", [])
         for r in restorations:
             regex, replacement = r.get("regex"), r.get("replacement")
             if r.get("hook") == "restore_spaces":
-                def restore_hook(match: Match) -> str:
-                    full_block = match.group(1)
+                def restore_hook(m: Match) -> str:
+                    full_block = m.group(1)
                     parts = full_block.split("SHIELDSEP", 1) if "SHIELDSEP" in full_block else full_block.split("\n", 1)
                     title = parts[0].replace('PROTECTSPACE', ' ').strip()
                     body = parts[1].strip() if len(parts) > 1 else ""
@@ -254,61 +283,29 @@ class DocConverter:
                 else:
                     content = re.sub(regex, replacement, content, flags=re.S)
 
-        # --- 5. ANTORA NORMALIZATION (Links & Images) ---
-        # Clean image paths (stripping the /images/ prefix used in Markdown)
+        # --- 7. ANTORA NORMALIZATION (Xrefs & Images) ---
+        # Image path cleanup
         content = re.sub(r'image::/images/(.*?)\[', r'image::\1[', content)
+
+        # SENIOR REQ: Image Scaling for PDF/DAPS
+        content = re.sub(r'image::([^\[]+)\[\]', r'image::\1[pdfwidth=100%,scalewidth=100%]', content)
         
-        def antora_xref_logic(match: Match) -> str:
-            """Converts Markdown links into Antora-compatible xrefs."""
-            raw_path = match.group(1) or ""
-            anchor = match.group(2) or ""
-            
-            # Clean and normalize path: remove extensions and 'inputs/' folder noise
+        def antora_xref_logic(m: Match) -> str:
+            raw_path = m.group(1) or ""
+            anchor = m.group(2) or ""
             path = raw_path.replace(".md", "").replace(".adoc", "").replace("./", "").strip("/")
             if "inputs/" in path:
                 path = path.split("inputs/")[-1]
-            
             if path:
                 path = f"{path}.adoc"
-                
-            # Normalize anchors to AsciiDoc style (lowercase with underscores)
             cl_anchor = ""
             if anchor:
-                cl_anchor = "#" + anchor.replace("#", "").lower().replace("-", "-")
+                cl_anchor = "#" + anchor.replace("#", "").lower()
             return f"xref:{path}{cl_anchor}"
 
-        # Matches Markdown link syntax and Pandoc-converted AsciiDoc links
         content = re.sub(r'(?:link:|xref:)(?:\+\+)?([^\[\s#\+]+)?(#[^\[\s\+]+)?(?:\+\+)?', antora_xref_logic, content)
 
-        # --- 6. FINAL HEADER CONSTRUCTION ---
-        today = datetime.now().strftime("%Y-%m-%d")
-        
-        # Generate the SEO-friendly slug for the main title
-        title_slug = self._slugify(self.discovered_title or "untitled")
-        
-        # Build the header with the ID and SEO attributes first
-        header_lines = [
-            f"[#{title_slug}]",
-            f"= {self.discovered_title or 'Untitled Document'}",
-            ":idprefix:",
-            ":idseparator: -"
-        ]
-        
-        # Inject YAML metadata as AsciiDoc attributes
-        for key, value in self.metadata.items():
-            if key.lower() != "title":
-                header_lines.append(f":{key}: {value}")
-        
-        header_lines.append(f":revdate: {today}")
-        
-        # Add global Antora headers from pyproject.toml
-        antora_cfg = self.config.get("antora", {})
-        header_lines.extend(antora_cfg.get("headers", []))
-        
-        header_block = "\n".join(header_lines) + "\n\n"
-        
-        # --- 7. CLEANUP & EXTENSION CONVERSION ---
-        # Final cleanup for Mermaid diagrams and Tab syntax
+        # --- 8. FINAL CLEANUP ---
         content = re.sub(r'\[source,mermaid\]\n----(.*?)----', r'[mermaid]\n....\1....', content, flags=re.DOTALL)
         content = content.replace("SHIELDADMONSTARTtabs", "[tabs]\n====")
         content = content.replace("SHIELDADMONEND", "====")

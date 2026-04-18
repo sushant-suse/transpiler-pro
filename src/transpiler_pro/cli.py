@@ -22,6 +22,7 @@ from typing import Any, Dict, Optional, List
 
 import typer
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
 # Core logic imports
 from transpiler_pro.core.converter import DocConverter
@@ -369,6 +370,76 @@ def audit_pipeline(
     
     # Generate the professional terminal report
     validator.render_terminal_report(reports)
+
+@app.command(name="check")
+def check_asciidoc(
+    file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific ADOC file"),
+    input_path: Path = typer.Option(OUTPUT_DIR, "--input", "-i", help="Path to the converted .adoc files"),
+    build_dir: Path = typer.Option(Path("data/build-check/html"), "--build-dir", help="Target for HTML preview"),
+    config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
+) -> None:
+    """
+    COMMAND CHECK: Validates AsciiDoc syntax and generates a mirrored HTML preview.
+    Uses Asciidoctor with --failure-level WARN to ensure enterprise-grade quality.
+    """
+    if not input_path.exists():
+        console.print(f"[bold red]Error:[/] Input path {input_path} not found.")
+        raise typer.Exit(1)
+
+    # 1. Target specific file or scan directory
+    if file_name:
+        adoc_files = list(input_path.rglob(file_name))
+        if not adoc_files:
+            console.print(f"[yellow]File {file_name} not found in {input_path}[/]")
+            return
+    else:
+        adoc_files = list(input_path.rglob("*.adoc"))
+
+    # 2. Clean and Prepare the HTML Mirror Directory
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    issues_found = 0
+    console.print(f"\n[bold blue]Build Check:[/] Rendering {len(adoc_files)} files to {build_dir}...\n")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task(description="Building HTML...", total=len(adoc_files))
+
+        for adoc_file in adoc_files:
+            # 3. Replicate the directory structure
+            rel_path = adoc_file.relative_to(input_path)
+            target_html_path = build_dir / rel_path.with_suffix(".html")
+            target_html_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # 4. Run Asciidoctor validation
+            result = subprocess.run(
+                ["asciidoctor", "-o", str(target_html_path), "--failure-level", "WARN", str(adoc_file)],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode != 0 or result.stderr:
+                # Capture Warnings and Errors
+                relevant_output = [line for line in result.stderr.splitlines() 
+                                   if "WARNING" in line or "ERROR" in line]
+                
+                if relevant_output:
+                    issues_found += 1
+                    console.print(f"[bold red]✗ Syntax Issue:[/] [cyan]{rel_path}[/]")
+                    for line in relevant_output:
+                        console.print(f"  [yellow]→ {line}[/]")
+
+            progress.update(task, advance=1)
+
+    if issues_found == 0:
+        console.print(f"\n[bold green]✨ BUILD SUCCESS:[/] All files rendered perfectly to [cyan]{build_dir}[/].\n")
+    else:
+        console.print(f"\n[bold red]🚩 BUILD WARNINGS:[/] {issues_found} files have syntax issues.\n")
 
 def main():
     """Main entry point for the CLI."""
