@@ -6,7 +6,7 @@
 
 Transitioning legacy Markdown to AsciiDoc often results in "broken" UI components (tabs, collapsibles) and inconsistent grammar. Transpiler-Pro automates the tedious parts of this migration through four key pillars:
 
-1. **Structural Integrity** - Converts complex Markdown (Admonitions, Collapsibles, Tables) and mirrors assets (images, `.yml`) without breaking syntax.
+1. **Structural Integrity & SEO Stability** - Converts complex Markdown (Admonitions, Collapsibles, Tables) into Antora-compliant AsciiDoc while "freezing" headers with hardcoded, SEO-friendly anchors to prevent broken links during renames.
 2. **Style Validation** - Checks content against the official **SUSE Vale Style Guide**.
 3. **Linguistic Healing** - Uses AI to automatically fix future tense and wordiness while maintaining subject-verb agreement.
 4. **Content Parity Audit** - **(New)** Automatically validates that no text, code blocks, or headings were lost during the conversion process via a high-fidelity parity engine.
@@ -17,11 +17,11 @@ Transpiler-Pro operates using a multi-stage "Transformation and Healing" process
 
 ### Phase X - Structural Conversion (The Converter)
 
-Standard converters often mangle Docusaurus-style admonitions (`:::note`) or HTML `<details>`. 
+Standard converters often mangle Docusaurus-style components or generate unstable IDs.
 
-* **Shielding Engine** - Uses regex to identify these complex blocks and replace them with unique temporary tokens (Shields).
-* **Asset Mirroring** - Automatically detects and copies non-Markdown files (for example, `_category_.yml`, images) to the output directory to maintain project structure.
-* **Restoration Pass** - Replaces tokens with high-fidelity, Antora-compliant AsciiDoc syntax (for example, `[%collapsible]`).
+* **Shielding Engine** - Uses a "Shield-Body-End" tokenization strategy to protect complex blocks (like `:::note`) from being mangled by the underlying conversion logic.
+* **The "Slug & Freeze" ID Engine** - Automatically injects unique, persistent anchors (for example, `[#access-keys-security]`) into every heading. This ensures URL stability for SEO and prevents dead links if titles are changed.
+* **Asset Mirroring** - Detects and copies non-Markdown files (for example, `_category_.yml`, images) to maintain the exact project hierarchy.
 
 ### Phase Y - Linguistic Repair (The NLP Engine)
 
@@ -33,11 +33,11 @@ Unlike simple find-and-replace tools, Transpiler-Pro understands **context** usi
 
 ### Phase Z - Content Parity Audit (The Validator)
 
-To guarantee zero content loss during the complex transformation, the pipeline concludes with a high-fidelity audit:
+To guarantee zero data loss, the pipeline concludes with a high-velocity validation engine optimized for technical documentation:
 
-* **Semantic Word Coverage** - Compares significant tokens between Markdown and AsciiDoc, accounting for branding fixes so that "wifi" → "Wi-Fi" is marked as a 100% match.
-* **Structural Parity** - Validates that the number of headings and tables matches the source exactly.
-* **Snippet Protection** - Performs a strict count and similarity check on all code blocks to ensure technical instructions remain intact.
+* **Component-Aware Scanning** - Unlike standard diff tools, the validator "sees" inside React/JSX components (like `<JsonDisplay>`), ensuring complex JSON schemas and technical specs are preserved 1:1.
+* **Technical Token Normalization** - A specialized tokenizer filters out formatting "noise" (hex fragments, date fluctuations, and punctuation) to focus the audit on actual prose and critical API parameters.
+* **High-Velocity Set Logic** - Optimized using Set Theory and lazy-loading structural diffs, reducing audit times for large libraries from **20 minutes to under 15 seconds**.
 
 ## 📂 Project Structure
 
@@ -55,6 +55,7 @@ To guarantee zero content loss during the complex transformation, the pipeline c
 ├── data/
 │   ├── inputs/             # Place your .md files here
 │   ├── intermediate/       # Raw .adoc conversions (Pre-repair)
+│   ├── audit-logs/         # Detailed parity reports (Phase Z evidence)
 │   ├── outputs/            # Final "healed" .adoc files
 │   └── knowledge_base.json # Branding & Technical Term dictionary
 └── pyproject.toml          # Central configuration for the entire pipeline
@@ -147,17 +148,17 @@ Transpiler-Pro provides a two-layered validation system to ensure your documenta
 
 During the repair phase, the tool tracks automated improvements and identifies manual tasks:
 
-* **Automated Fixes**: The CLI reports exactly how many grammar, tense, and branding issues were auto-healed.
-* **Review Logs**: Any complex stylistic issues that require a human eye are logged in the terminal with line numbers and rule IDs.
-* **Style-Guide Perfect**: A confirmation that the document has passed 100% of the SUSE official rules.
+* **Automated Fixes** - The CLI reports exactly how many grammar, tense, and branding issues were auto-healed.
+* **Review Logs** - Any complex stylistic issues that require a human eye are logged in the terminal with line numbers and rule IDs.
+* **Style-Guide Perfect** - A confirmation that the document has passed 100% of the SUSE official rules.
 
 ### 2. Content Parity Dashboard (Phase Z)
 
 After conversion, the tool runs a strict comparison between the Markdown source and the AsciiDoc result:
 
-* **Prose Coverage**: A percentage-based check ensuring the core message was preserved.
-* **Structural Consistency**: Confirms that the number of headings and tables remains identical.
-* **Snippet Defense**: A zero-tolerance check for code blocks; if a technical snippet is lost, the audit flags it as a **CRITICAL ERROR**.
+* **Prose Coverage** - A percentage-based check ensuring the core message was preserved.
+* **Snippet Defense** - A zero-tolerance check for code blocks; if a technical snippet is lost, the audit flags a **CRITICAL ERROR**.
+* **Detailed Audit Logs** - Generates exhaustive JSON evidence in `data/audit-logs/` for any file falling below the 98% threshold, allowing for rapid debugging of technical edge cases.
 
 ## 🧪 Development & Testing
 
