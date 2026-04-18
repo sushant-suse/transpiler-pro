@@ -184,7 +184,7 @@ uv run transpiler-pro check --file instance.adoc
 
 ### Targeted Processing
 
-If you are working on a specific document and don't want to process the entire library, use the `--file` (or `-f`) flag. This works across `full-run`, `x-convert`, `y-repair`, and `check`.
+If you are working on a specific document and do not want to process the entire library, use the `--file` (or `-f`) flag. This works across `full-run`, `x-convert`, `y-repair`, and `check`.
 
 ```bash
 # Run the entire pipeline for a single file
