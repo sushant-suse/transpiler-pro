@@ -79,14 +79,20 @@ path_normalization = [{ regex = "^\\./", replacement = "" }]
 
 # PHASE 1: SHIELDING
 shielding_patterns = [
-    { regex = ":::(?P<type>\\w+)\\n(?P<body>.*?)\\n:::", replacement = "SHIELDADMONSTART\\1\n\\2\nSHIELDADMONEND" },
+    # Captures :::type[Title] body ::: OR :::type body :::
+    { regex = ":::(?P<type>\\w+)(?:\\[(?P<title>.*?)\\])?(?:\\s*\\n)?(?P<body>.*?)\\s*:::", replacement = "SHIELDADMONSTART\\1TITLE\\2BODY\\3ENDADMON", flags = "S" },
+    
     { regex = "<details>\\s*<summary>(.*?)</summary>\\s*(.*?)\\s*</details>", replacement = "SHIELDCOLLSTART\\1SHIELDSEP\\2SHIELDCOLLEND", hook = "protect_spaces" }
 ]
 
 # PHASE 2: RESTORATION
 restoration_patterns = [
-    { regex = "(?s)SHIELDADMONSTART{key}\\s*(.*?)\\s*SHIELDADMONEND", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
-    # Simplified regex to allow the Python hook to handle internal SHIELDSEP logic
+    # 1. Restoration with Title
+    { regex = "(?s)SHIELDADMONSTART{key}TITLE(.+?)BODY(.*?)\\s*ENDADMON", replacement = "[{val}]\n.\\1\n====\n\\2\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
+    
+    # 2. Restoration without Title (Note the empty space between TITLE and BODY)
+    { regex = "(?s)SHIELDADMONSTART{key}TITLE\\s*BODY(.*?)\\s*ENDADMON", replacement = "[{val}]\n====\n\\1\n====", map = { note = "NOTE", info = "IMPORTANT", tip = "TIP", warning = "CAUTION" } },
+
     { regex = "(?s)SHIELDCOLLSTART(.*?)\\s*SHIELDCOLLEND", replacement = ".\\1\n[%collapsible]\n======\n\\2\n======", hook = "restore_spaces" }
 ]
 
