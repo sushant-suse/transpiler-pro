@@ -74,6 +74,12 @@ def sync_styles(config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c"
 
     This ensures the Vale linter uses the latest SUSE-approved linguistic rules.
     If a safe pull fails due to local cache corruption, it performs a fresh recovery clone.
+
+    Args:
+        config (str): Optional path to the configuration file to determine the style guide repository URL
+
+    Returns:
+        None: The function updates the local styles directory in place.
     """
     pipeline_config = load_config(Path(config))
     repo_url = pipeline_config.get("pipeline", {}).get(
@@ -124,6 +130,15 @@ def convert_x(
     Key Features:
     - Markdown files (.md, .mdx) are processed via the DocConverter.
     - All other files (e.g. .yml, .png, images) are copied directly to preserve structure.
+
+    Args:
+        file_name (Optional[str]): If provided, only this specific file will be processed.
+        input_path (Path): The directory to scan for source files.
+        output_path (Path): The directory to store converted files and mirrored assets.
+        config (str): Optional path to the configuration file for converter settings.
+
+    Returns:
+        None: The function writes converted files and mirrored assets to the output directory.
     """
     config_path = Path(config)
     pipeline_config = load_config(config_path)
@@ -186,6 +201,16 @@ def repair_y(
     1. Linguistic Engine: Tense shifting and grammar correction via spaCy.
     2. Style Fixer: Resolves Vale linter violations and branding errors.
     3. Audit Logging: Records any remaining issues that require manual review.
+
+    Args:
+        file_name (Optional[str]): If provided, only this specific .adoc file will be processed.
+        input_path (Path): The directory to scan for intermediate .adoc files.
+        output_path (Path): The directory to store the final repaired .adoc files.
+        fix (bool): Flag to enable or disable the automated fixing process.
+        config (str): Optional path to the configuration file for repair settings.
+
+    Returns:
+        None: The function writes repaired files to the output directory and logs any issues.
     """
     config_path = Path(config)
     pipeline_config = load_config(config_path)
@@ -283,6 +308,17 @@ def execute_full_pipeline(
     This is the recommended command for production use. It handles the entire
     lifecycle of a document, maintaining folder structures and ensuring the 
     highest linguistic quality.
+
+    Args:
+        file_name (Optional[str]): If provided, only this specific file will be processed.
+        input_path (Path): The directory to scan for source Markdown files.
+        output_path (Path): The directory to store final healed AsciiDoc files.
+        sync (bool): Flag to enable or disable the style synchronization step.
+        audit (bool): Flag to enable or disable the automatic parity check after repair.
+        config (str): Optional path to the configuration file for pipeline settings.
+
+    Returns:
+        None: The function executes the full pipeline and writes outputs accordingly.
     """
     # 0. Capture the start time for performance monitoring and reporting in the terminal.
     # Use time.time() for the duration calculation (stopwatch)
@@ -356,6 +392,14 @@ def audit_pipeline(
     
     Independent validation check to ensure no content was lost during 
     the transformation process.
+
+    Args:
+        input_path (Path): The directory containing the original Markdown files.
+        output_path (Path): The directory containing the final AsciiDoc files.
+        config (str): Optional path to the configuration file for validator settings.
+
+    Returns:
+        None: The function runs the validation and outputs a terminal report.
     """
     config_path = Path(config)
     pipeline_config = load_config(config_path)
@@ -381,6 +425,15 @@ def check_asciidoc(
     """
     COMMAND CHECK: Validates AsciiDoc syntax and generates a mirrored HTML preview.
     Uses Asciidoctor with --failure-level WARN to ensure enterprise-grade quality.
+
+    Args:
+        file_name (Optional[str]): If provided, only this specific .adoc file will be processed.
+        input_path (Path): The directory to scan for intermediate .adoc files.
+        build_dir (Path): The directory to store the HTML preview of the .adoc files.
+        config (str): Optional path to the configuration file for validator settings.
+    
+    Returns:
+        None: The function runs the validation and outputs an HTML preview in the build directory.
     """
     if not input_path.exists():
         console.print(f"[bold red]Error:[/] Input path {input_path} not found.")
