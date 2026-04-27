@@ -13,7 +13,6 @@ It uses a "Shield-Pandoc-Restore" sandwich architecture:
 
 import re
 import subprocess
-import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, Set, List

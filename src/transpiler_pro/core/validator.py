@@ -8,10 +8,10 @@ import spacy
 import re
 import difflib
 import json
-import html  # Ensure html is imported for unescape
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Tuple
+
 
 # Load the spaCy NLP model for lemmatization (tense-aware comparison)
 try:
@@ -22,12 +22,14 @@ except OSError:
     subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
 
+
 @dataclass
 class ValidationIssue:
     severity: str  # ERROR | WARNING
     category: str  # coverage | heading | code | table | structure
     message: str
     detail: str = ""
+
 
 @dataclass
 class ValidationReport:
@@ -43,6 +45,7 @@ class ValidationReport:
     @property
     def passed(self) -> bool:
         return not any(i.severity == "ERROR" for i in self.issues) and not self.skipped
+
 
 class ParityValidator:
     def __init__(self, config: Dict):
@@ -72,6 +75,7 @@ class ParityValidator:
         # Clear out old logs to prevent confusion with stale data.
         for f in self.log_dir.glob("*.json"):
             f.unlink()
+
 
     def _normalize_text(self, text: str, is_adoc: bool = False) -> str:
         """Strips syntax to leave only comparable prose and technical tokens.
@@ -130,6 +134,7 @@ class ParityValidator:
         
         return text
 
+
     def get_significant_words(self, text: str) -> Set[str]:
         """Extracts meaningful tokens while handling branding and lemmatization.
         
@@ -160,7 +165,7 @@ class ParityValidator:
         
         # Optimized Branding Mapping: 
         # Convert "{longhorn-product-name}" back to "storage" for comparison
-        brand_map = {v.lower(): k.lower() for k, v in self.branding.items()}
+        # brand_map = {v.lower(): k.lower() for k, v in self.branding.items()}
         
         # We also need to strip the curly braces from the keys in brand_map 
         # so they match the tokens found by the NLP.
@@ -181,6 +186,7 @@ class ParityValidator:
                 final_set.add(word)
                 
         return final_set
+
 
     def compare(self, md_content: str, adoc_content: str, md_path: str, adoc_path: str) -> ValidationReport:
         """Performs a deep comparison between MD source and ADOC result.
@@ -251,6 +257,7 @@ class ParityValidator:
 
         return report
 
+
     def _write_detailed_log(self, source_path: str, data: Dict):
         """Saves exhaustive validation details to a JSON file.
         
@@ -268,6 +275,7 @@ class ParityValidator:
         # Ensure the log file is written with UTF-8 encoding to handle any special characters
         with open(log_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+
 
     def _extract_headings(self, text: str, is_adoc: bool) -> List[Tuple[int, str]]:
         """Returns a list of (level, text) tuples for all headings.
@@ -293,6 +301,7 @@ class ParityValidator:
                 headings.append((len(m.group(1)), m.group(2).strip()))
         return headings
 
+
     def _extract_code_blocks(self, text: str, is_adoc: bool) -> List[str]:
         """Extracts the interior content of code blocks for logic-check.
         
@@ -310,6 +319,7 @@ class ParityValidator:
         else:
             # Markdown blocks: ```
             return re.findall(r"^```.*?\n(.*?)\n```", text, re.S | re.M)
+
 
     def _check_structural_integrity(self, report: ValidationReport, 
                                    md_text: str, adoc_text: str):
@@ -350,7 +360,9 @@ class ParityValidator:
             for i, (m_block, a_block) in enumerate(zip(md_code, adoc_code)):
                 m_clean, a_clean = m_block.strip(), a_block.strip()
                 
-                # PERFORMANCE GATE: If the character count difference is tiny (<2%), skip heavy diffing
+                # PERFORMANCE GATE: If the character count difference is tiny (<2%), skip heavy diffing and 
+                # assume it's a minor formatting change. This prevents the validator from getting bogged down on 
+                # large code blocks that are mostly intact.
                 len_diff = abs(len(m_clean) - len(a_clean))
                 if len_diff > 50 and (len_diff / max(len(m_clean), 1)) > 0.02:
                     # Use quick_ratio on a sample (first 5000 chars) for speed
@@ -362,6 +374,7 @@ class ParityValidator:
                             message=f"Code block {i+1} content shifted significantly.",
                             detail=f"Similarity approx: {ratio:.1%}"
                         ))
+
 
     def _extract_table_footprint(self, text: str, is_adoc: bool) -> List[int]:
         """Returns a list where each entry is the number of columns in a table.
@@ -396,6 +409,7 @@ class ParityValidator:
                     col_count = rows[0].count("|") - 1
                     footprints.append(col_count)
         return footprints
+    
 
     def validate_directories(self, input_dir: Path, output_dir: Path) -> List[ValidationReport]:
         """
@@ -460,6 +474,7 @@ class ParityValidator:
             reports.append(report)
         
         return reports
+    
 
     def render_terminal_report(self, reports: List[ValidationReport]) -> None:
         """Prints a high-visibility summary of the validation results.
