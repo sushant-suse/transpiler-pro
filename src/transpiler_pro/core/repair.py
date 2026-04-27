@@ -12,6 +12,7 @@ import spacy
 import re
 from spacy.util import filter_spans
 
+
 # Ensure the spaCy NLP model is available; download it if necessary.
 try:
     nlp = spacy.load("en_core_web_sm")
@@ -20,6 +21,7 @@ except OSError:
     import sys
     subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
+
 
 class LinguisticEngine:
     """
@@ -42,26 +44,45 @@ class LinguisticEngine:
         3. Aggressive Branding: Enforces SUSE, Wi-Fi, and IP casing rules.
         4. NLP Tense Shift: Converts future tense to present tense with subject awareness.
         5. Surgical Offsets: Replaces text using character indices to prevent regex collisions.
+
+        Args:
+            text (str): The raw text to be repaired.
+        
+        Returns:
+            str: The linguistically repaired text.
         """
-        # --- PHASE 1: CODE SHIELDING ---
+        # --- 1. CODE SHIELDING ---
         protected_blocks = []
-        def shield_code(match):
+
+        def shield_code(match: re.Match) -> str:
+            """
+            Replaces code blocks with placeholders to protect them from NLP processing.
+
+            Args:
+                match (re.Match): A regex match object for a [source] block.
+            
+            Returns:
+                str: A unique placeholder string that will be replaced back later.
+            """
             placeholder = f" REPAIR_SHIELD_{len(protected_blocks)}_ "
             protected_blocks.append(match.group(0))
             return placeholder
 
         text = re.sub(r'(\[source,.*?\]\n----\n(.*?)\n----)', shield_code, text, flags=re.DOTALL)
 
-        # --- PRE-PROCESS: FORCE NEWLINES ON SQUASHED LISTS ---
-        # This fixes the issue where "* Pointer" is on the same line as prose.
-        # It looks for a character followed by a space and a bullet marker.
-        text = re.sub(r'([a-zA-Z0-9.])\s+([*.-]\s+)', r'\1\n\2', text)
+        # --- 2. FORCE NEWLINES ON SQUASHED LISTS ---
+        # Only split if the preceding character is end-of-sentence punctuation or a closing bracket
+        text = re.sub(r'([.?!>\]])\s+([*.-]\s+)(?!\d{4})', r'\1\n\2', text)
 
-        # --- PHASE 2: LINE-BY-LINE PROCESSING ---
+        # --- 3. LINE-BY-LINE PROCESSING ---
         lines = text.splitlines()
         repaired_lines = []
         in_list_block = False # True if we are currently inside a sequence of bullets
 
+        # We process the text line by line to preserve structural elements like lists and headings, 
+        # while applying NLP repairs only to prose lines. The in_list_block flag helps us determine 
+        # when we are inside a list, so we can ensure proper spacing between list items and prevent 
+        # unintended merges of adjacent bullets.
         for line in lines:
             stripped = line.strip()
             
@@ -71,62 +92,72 @@ class LinguisticEngine:
                 in_list_block = False
                 continue
                 
-            # 2. Handle Structural Headers/Markers: Just append
-            if line.startswith(('= ', '[#', ':', 'image::', 'xref:', '----', '[source')):
+            # 2. Handle Structural Headers/Markers: Just append without NLP processing and reset list state.
+            # This includes headings (e.g., "= Heading"), admonitions, images, xrefs, and horizontal rules.
+            if line.startswith(('=', '[#', ':', 'image::', 'xref:', '----', '[source')):
                 repaired_lines.append(line)
                 in_list_block = False
                 continue
             
             # 3. Detect List Items (*, ., -)
-            is_list = re.match(r'^[\s]*[*.-]+\s+', line)
+            is_list = re.match(r'^[\s]*[*.-]+\s+(?!\d{4}-\d{2}-\d{2})', line)
             
             if is_list:
                 # If we are starting a list but were NOT just in one, force a gap
-                # This separates the list from the paragraph above it.
                 if not in_list_block and repaired_lines and repaired_lines[-1] != "":
                     repaired_lines.append("") 
                 
+                # Process the prose part of the list item separately to preserve the bullet marker and spacing.
                 marker_match = re.match(r'^([\s]*[*.-]+\s+)(.*)', line)
                 marker, prose = marker_match.group(1), marker_match.group(2)
                 repaired_lines.append(marker + self._process_prose_nlp(prose))
                 
-                # Mark that we are now inside a list block (next bullet shouldn't trigger a gap)
                 in_list_block = True
             
             # 4. Handle Standard Prose
             else:
                 repaired_lines.append(self._process_prose_nlp(line))
-                in_list_block = False # We are in a paragraph, not a list block
+                in_list_block = False
 
         final_text = "\n".join(repaired_lines)
 
-        # --- PHASE 7: RESTORE CODE BLOCKS ---
+        # --- 4. RESTORE CODE BLOCKS ---
         for i, original_content in enumerate(protected_blocks):
             final_text = final_text.replace(f" REPAIR_SHIELD_{i}_ ", original_content)
 
+        # --- 5. UNCLOAK THE HYPHENS ---
+        # Now that the repair engine is done, we can safely restore the raw hyphens 
+        # that were merged during the NLP phase without risking regex collisions. 
+        final_text = final_text.replace("&#45;", "-")
+
         return final_text
+    
 
     def _process_prose_nlp(self, text: str) -> str:
         """
         Helper method that contains your original NLP and Branding logic.
         This is now applied only to individual lines of prose.
+
+        Args:
+            text (str): A single line of text to process with NLP and branding rules.
+        
+        Returns:
+            str: The processed line of text after applying branding and NLP repairs.
         """
-        # --- PHASE 3: AGGRESSIVE BRANDING ---
-        # Replaces branding errors (e.g., 'suse' -> 'SUSE') globally.
+        # --- 1. AGGRESSIVE BRANDING ---
         sorted_keys = sorted(self.kb.keys(), key=len, reverse=True)
         for key in sorted_keys:
             replacement = self.kb[key]
             if not replacement or str(replacement).lower() in ["spellings", "spelling", "learned", "none", "val"]:
                 continue
             
-            # Pattern ensures we only match whole words, fixing the 'bes' bug inside 'describes'
             pattern = rf"(?i)\b{re.escape(key)}\b"
             text = re.sub(pattern, str(replacement), text)
 
-        # --- PHASE 4: NLP ANALYSIS ---
+        # --- 2. NLP ANALYSIS ---
         doc = nlp(text)
         
-        # --- PHASE 5: HYPHEN MERGER ---
+        # --- 3. HYPHEN MERGER ---
         spans_to_merge = []
         for token in doc:
             if token.text == "-" and token.i > 0 and token.i < len(doc) - 1:
@@ -138,14 +169,18 @@ class LinguisticEngine:
         
         edits = []
         
+        # --- 4. THE FUTURE TENSE DETECTOR & SHIFTER ---
         for token in doc:
-            # Skip verbs already in the perfect tense
             if token.pos_ == "VERB":
                 auxiliaries = [w.lemma_.lower() for w in token.lefts if w.dep_ in ["aux", "auxpass"]]
                 if "have" in auxiliaries:
                     continue
 
-            # --- PHASE 6: THE TENSE SHIFTER ---
+            # --- 5. THE TENSE SHIFTER ---
+            # We look for auxiliary verbs that indicate future tense (e.g., "will") and then determine 
+            # if they are part of a passive or progressive construction. We also identify the subject 
+            # to ensure correct agreement when shifting to present tense. The edits are collected as 
+            # character offsets to be applied later, ensuring that we don't interfere with the tokenization process while iterating.
             if token.pos_ == "AUX" and token.lemma_ == "will":
                 next_token = doc[token.i + 1] if token.i + 1 < len(doc) else None
                 is_passive_or_progressive = next_token and next_token.lemma_ == "be"
@@ -157,25 +192,26 @@ class LinguisticEngine:
                         break
                 
                 is_plural = False
+
+                # We determine if the subject is plural based on pronoun forms, morphological features, or POS tags.
                 if subject_token:
-                    # Look for the 'Head' of the subject phrase. 
-                    # In "The set of instructions", the head of 'instructions' is 'set'.
                     actual_subject = subject_token
                     if subject_token.dep_ == "pobj" and subject_token.head.dep_ == "prep":
                          actual_subject = subject_token.head.head
 
                     t = actual_subject.text.lower()
                     
-                    # 1. Check for specific plural pronouns
                     if t in ["you", "we", "i", "they"]:
                         is_plural = True
-                    # 2. Trust the Morphological Number (Singular vs Plural)
                     elif "Number=Plur" in str(actual_subject.morph):
                         is_plural = True
-                    # 3. Standard NLP tags as failsafe
                     elif actual_subject.tag_ in ["NNS", "NNPS"]:
                         is_plural = True
 
+                # Based on the analysis, we determine the appropriate replacement for "will". 
+                # If it's part of a passive or progressive construction, we replace "will" with "is/are" depending on plurality. 
+                # Otherwise, we conjugate the main verb to present tense and remove "will". The edits are stored as 
+                # character offsets to be applied after the loop to avoid modifying the token stream while iterating.
                 if is_passive_or_progressive:
                     replacement = "are" if is_plural else "is"
                     start_idx = token.idx
@@ -191,35 +227,37 @@ class LinguisticEngine:
                         else:
                             replacement = self._conjugate_to_present(head)
                             
-                        w_len = len(token.text) + len(token.whitespace_)
-                        edits.append((token.idx, token.idx + w_len, ""))
+                        # If it's a contraction like "'ll", don't swallow the trailing space
+                        if token.text.startswith("'"):
+                            edits.append((token.idx, token.idx + len(token.text), ""))
+                        else:
+                            w_len = len(token.text) + len(token.whitespace_)
+                            edits.append((token.idx, token.idx + w_len, ""))
                         edits.append((head.idx, head.idx + len(head.text), replacement))
 
-        # --- PHASE 6: SURGICAL OFFSETS ---
-        # We sort edits in reverse order to avoid messing up indices as we replace text.
+        # --- 6. SURGICAL OFFSETS ---
         edits = sorted(list(set(edits)), key=lambda x: x[0], reverse=True)
         for start, end, rep in edits:
             text = text[:start] + rep + text[end:]
 
         return text
+    
 
     def _conjugate_to_present(self, verb_token) -> str:
         """
-        Helper: Conjugates a base verb to the 3rd-person singular present.
+        Conjugates a verb token to present tense, handling subject-verb agreement for third-person singular.
+
+        Args:
+            verb_token (spacy.tokens.Token): The verb token to conjugate.
         
-        Example: 
-            "check" -> "checks"
-            "fix"   -> "fixes"
-            "study" -> "studies"
-            "execute" -> "executes"
+        Returns:
+            str: The conjugated verb in present tense.
         """
         text = verb_token.text
-        # Standard 'es' for sibilant sounds.
         if text.endswith(('s', 'sh', 'ch', 'x', 'z')):
             return text + "es"
-        # The 'y' to 'ies' rule.
         elif text.endswith('y') and len(text) > 1 and text[-2] not in "aeiou":
             return text[:-1] + "ies"
-        # Standard 's' for everything else.
         else:
             return text + "s"
+        
