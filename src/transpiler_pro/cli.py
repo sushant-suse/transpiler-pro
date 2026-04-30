@@ -430,7 +430,8 @@ def audit_pipeline(
 def check_asciidoc(
     file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific ADOC file"),
     input_path: Path = typer.Option(OUTPUT_DIR, "--input", "-i", help="Path to the converted .adoc files"),
-    build_dir: Path = typer.Option(Path("data/build-check/html"), "--build-dir", help="Target for HTML preview"),
+    build_dir: Path = typer.Option(Path("data/build-check"), "--build-dir", help="Target for build output"),
+    docbook: bool = typer.Option(False, "--docbook", help="Additionally build and validate against DocBook5"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
     """
@@ -441,6 +442,7 @@ def check_asciidoc(
         file_name (Optional[str]): If provided, only this specific .adoc file will be processed.
         input_path (Path): The directory to scan for intermediate .adoc files.
         build_dir (Path): The directory to store the HTML preview of the .adoc files.
+        docbook (bool): Flag to enable additional DocBook5 validation alongside HTML5.
         config (str): Optional path to the configuration file for validator settings.
     
     Returns:
@@ -459,51 +461,71 @@ def check_asciidoc(
     else:
         adoc_files = list(input_path.rglob("*.adoc"))
 
-    # 2. Clean and Prepare the HTML Mirror Directory
-    if build_dir.exists():
-        shutil.rmtree(build_dir)
-    build_dir.mkdir(parents=True, exist_ok=True)
+    # 2. Always setup the HTML directory
+    html_dir = build_dir / "html"
+    if html_dir.exists():
+        shutil.rmtree(html_dir)
+    html_dir.mkdir(parents=True, exist_ok=True)
+
+    # 3. Conditionally setup the DocBook directory
+    if docbook:
+        xml_dir = build_dir / "docbook"
+        if xml_dir.exists():
+            shutil.rmtree(xml_dir)
+        xml_dir.mkdir(parents=True, exist_ok=True)
 
     issues_found = 0
-    console.print(f"\n[bold blue]Build Check:[/] Rendering {len(adoc_files)} files to {build_dir}...\n")
+    # Multiply tasks if we are doing both builds
+    total_tasks = len(adoc_files) * (2 if docbook else 1)
+    
+    console.print(f"\n[bold blue]Build Check:[/] Rendering {len(adoc_files)} files...\n")
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        transient=True,
-    ) as progress:
-        task = progress.add_task(description="Building HTML...", total=len(adoc_files))
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+        task = progress.add_task(description="Building...", total=total_tasks)
 
         for adoc_file in adoc_files:
-            # 3. Replicate the directory structure
             rel_path = adoc_file.relative_to(input_path)
-            target_html_path = build_dir / rel_path.with_suffix(".html")
+            
+            # --- PHASE A: ALWAYS BUILD HTML ---
+            target_html_path = html_dir / rel_path.with_suffix(".html")
             target_html_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # 4. Run Asciidoctor validation
-            result = subprocess.run(
+            result_html = subprocess.run(
                 ["asciidoctor", "-o", str(target_html_path), "--failure-level", "WARN", str(adoc_file)],
-                capture_output=True,
-                text=True
+                capture_output=True, text=True
             )
-
-            if result.returncode != 0 or result.stderr:
-                # Capture Warnings and Errors
-                relevant_output = [line for line in result.stderr.splitlines() 
-                                   if "WARNING" in line or "ERROR" in line]
-                
-                if relevant_output:
+            
+            if result_html.returncode != 0 or result_html.stderr:
+                relevant = [line for line in result_html.stderr.splitlines() if "WARNING" in line or "ERROR" in line]
+                if relevant:
                     issues_found += 1
-                    console.print(f"[bold red]✗ Syntax Issue:[/] [cyan]{rel_path}[/]")
-                    for line in relevant_output:
+                    console.print(f"[bold red]✗ HTML Syntax Issue:[/] [cyan]{rel_path}[/]")
+                    for line in relevant:
                         console.print(f"  [yellow]→ {line}[/]")
-
             progress.update(task, advance=1)
 
+            # --- PHASE B: OPTIONALLY BUILD DOCBOOK ---
+            if docbook:
+                target_xml_path = xml_dir / rel_path.with_suffix(".xml")
+                target_xml_path.parent.mkdir(parents=True, exist_ok=True)
+
+                result_xml = subprocess.run(
+                    ["asciidoctor", "-b", "docbook5", "-o", str(target_xml_path), "--failure-level", "WARN", str(adoc_file)],
+                    capture_output=True, text=True
+                )
+                
+                if result_xml.returncode != 0 or result_xml.stderr:
+                    relevant = [line for line in result_xml.stderr.splitlines() if "WARNING" in line or "ERROR" in line]
+                    if relevant:
+                        console.print(f"[bold red]✗ DocBook Syntax Issue:[/] [cyan]{rel_path}[/]")
+                        for line in relevant:
+                            console.print(f"  [magenta]→ {line}[/]")
+                progress.update(task, advance=1)
+
     if issues_found == 0:
-        console.print(f"\n[bold green]✨ BUILD SUCCESS:[/] All files rendered perfectly to [cyan]{build_dir}[/].\n")
+        console.print(f"\n[bold green]✨ BUILD SUCCESS:[/] HTML preview ready in [cyan]{html_dir}[/].\n")
     else:
-        console.print(f"\n[bold red]🚩 BUILD WARNINGS:[/] {issues_found} files have syntax issues.\n")
+        console.print(f"\n[bold red]🚩 BUILD WARNINGS:[/] {issues_found} files had syntax issues.\n")
 
 
 def generate_master_attributes(output_path: Path, converter: DocConverter) -> None:

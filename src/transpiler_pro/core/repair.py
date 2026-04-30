@@ -133,6 +133,7 @@ class LinguisticEngine:
         final_text = final_text.replace('\u00a0', ' ')
 
         # Catch NLP Tense Shifting hallucinations
+        final_text = final_text.replace(" haves ", " have ")
         final_text = final_text.replace(" bes able", " is able")
         final_text = final_text.replace(" no longer bes ", " no longer is ")
         final_text = final_text.replace(" certain other ", " some other ")

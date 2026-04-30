@@ -656,8 +656,32 @@ class DocConverter:
         # Stripping redundant titles (where title is the same as filename)
         # content = re.sub(r'(image::?[^\[]+)\[(.*?)(?:,title="\2")\]', r'\1[\2]', content)
 
-        # Default Scaling for empty brackets
-        content = re.sub(r'image::([^\[]+)\[\]', r'image::\1[pdfwidth=100%,scalewidth=100%]', content)
+        # Default Scaling for ALL brackets (empty or populated)
+        def inject_image_scaling(m: re.Match) -> str:
+            """
+            Injects default pdfwidth and scalewidth attributes into image macros, while preserving existing attributes and preventing duplication if scaling attributes already exist.
+
+            Args:
+                m: The regex match object for an image macro, containing the path and existing attributes.
+            Returns:
+                str: The modified image macro with pdfwidth and scalewidth attributes injected, while preserving existing attributes and preventing duplication if scaling attributes already exist.
+            """
+            path = m.group(1)
+            attrs = m.group(2).strip()
+            
+            # Prevent duplicating scaling attributes if they already exist
+            if "pdfwidth" in attrs or "scalewidth" in attrs:
+                return m.group(0)
+                
+            # If attributes (like alt text or title) already exist, append scaling with a comma.
+            if attrs:
+                return f"image::{path}[{attrs},pdfwidth=100%,scalewidth=100%]"
+            
+            # Otherwise, just insert scaling.
+            return f"image::{path}[pdfwidth=100%,scalewidth=100%]"
+
+        # This regex strictly captures the path in group 1, and everything inside the brackets in group 2
+        content = re.sub(r'image::([^\[]+)\[([^\]]*)\]', inject_image_scaling, content)
         
         # --- 8. ANTORA XREFS ---
         def antora_xref_logic(m: re.Match) -> str:
