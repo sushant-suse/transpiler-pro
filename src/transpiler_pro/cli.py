@@ -17,6 +17,7 @@ from datetime import datetime
 import tomllib
 import subprocess
 import shutil
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 
@@ -263,6 +264,11 @@ def repair_y(
                 # Style Fixer: Fix spelling, branding, and linter-specific suggestions
                 file_key = str(final_path.resolve())
                 fixer.fix_file(final_path, initial_findings.get(file_key, []))
+
+                # Post-Fix Normalization: Ensure that any Xref: issues are corrected after all fixes are applied.
+                post_fix_content = final_path.read_text(encoding="utf-8")
+                post_fix_content = re.sub(r'(?i)\bxref:', 'xref:', post_fix_content)
+                final_path.write_text(post_fix_content, encoding="utf-8")
 
                 # Second Pass: Verification and Audit Logging
                 final_findings = linter.run()
