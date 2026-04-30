@@ -37,26 +37,14 @@ class DocConverter:
         self.used_ids: Set[str] = set()
         self.protected_json: List[str] = []
         self.heading_vault = {}
+        # Set to True to replace brand names with {attributes}
+        self.REPLACE_WITH_ATTRIBUTES = True
 
         # --- SUSE Branding Attribute Map ---
-        # Format: "Raw Text to Find": "{attribute-variable-name}"
-        # ORDER MATTERS: Longest strings first to prevent partial matching.
+        # Format: "Exact Text to find": "{attribute-variable}"
         self.attribute_map = {
-            "SUSE® Rancher Prime: Admission Policy Manager": "{kubewarden-product-name}",
-            "SUSE® Rancher Prime: Continuous Delivery": "{fleet-product-name}",
-            "SUSE® Rancher Prime: OS Manager": "{elemental-product-name}",
-            "SUSE® Rancher Prime: Cluster API": "{turtles-product-name}",
-            "SUSE® Rancher Prime: K3s": "{k3s-product-name}",
-            "SUSE® Rancher Prime: RKE2": "{rke2-product-name}",
-            "SUSE® Rancher Prime": "{rancher-product-name-tm}",
-            "SUSE Rancher Prime": "{rancher-product-name}",
-            "SUSE® Virtualization": "{harvester-product-name-tm}",
-            "SUSE Virtualization": "{harvester-product-name}",
-            "SUSE® Storage": "{longhorn-product-name-tm}",
-            "SUSE Storage": "{longhorn-product-name}",
-            "SUSE® Security": "{neuvector-product-name}",
-            "SUSE® Losant": "{losant-product-name}",
-            "SUSE Losant": "{losant-product-name}"
+            "Losant": "{losant-product-name}",
+            # Add other SUSE mappings here...
         }
 
     def _load_project_config(self) -> Dict[str, Any]:
@@ -89,19 +77,20 @@ class DocConverter:
         Returns:
             str: The text with product names replaced by attributes.
         """
-        # Guard clause for empty text to avoid unnecessary processing.
-        if not text:
+        # Guard clause: If text is empty or if attribute replacement is disabled, return the original text.
+        if not text or not self.REPLACE_WITH_ATTRIBUTES:
             return text
         
         # We iterate through the attribute map and apply replacements. 
         # The regex ensures we only replace standalone occurrences of the product names, 
-        # not when they are part of URLs or file paths.
+        # not when they are part of URLs or file paths.        
         for raw_name, attr in self.attribute_map.items():
-            # Refined Regex: Protects URLs (/:) but allows trailing periods in sentences
-            pattern = rf"(?<![/:])\b{re.escape(raw_name)}\b"
-            # The replacement is straightforward, but we must ensure that if the raw_name is part of a contraction 
-            # (e.g., "Rancher's"), we don't accidentally remove the trailing 's' or space. 
-            # The regex and replacement logic should handle this gracefully.
+            # SMART REGEX:
+            # (?<![/:]) -> Negative Lookbehind: Don't match if preceded by / or : (Shields paths/URLs)
+            # \b...\b   -> Word Boundary: Match the whole word only
+            # (?![/.])  -> Negative Lookahead: Don't match if followed by / or . (Shields extensions/paths)
+            pattern = rf"(?<![/:])\b{re.escape(raw_name)}\b(?![/.])"
+            
             text = re.sub(pattern, attr, text)
 
         return text
@@ -365,7 +354,7 @@ class DocConverter:
         # --- ID STRATEGY TOGGLE ---
         # Set to True for SUSE-style [#id] shorthand
         # Set to False for long-form [id="id"]
-        USE_SUSE_SHORTHAND = False
+        USE_SUSE_SHORTHAND = True
 
         def smart_id_format(final_id: str) -> str:
             """
@@ -488,9 +477,32 @@ class DocConverter:
             ":idseparator: -"
         ]
         
-        # We add all metadata fields except "title" to the header block as Antora attributes.
+        # Apply branding attributes to metadata values as well
         for key, value in self.metadata.items():
-            if key.lower() != "title":
+            if key.lower() == "title":
+                continue
+
+            # Check the Master Toggle first
+            if not self.REPLACE_WITH_ATTRIBUTES:
+                header_lines.append(f":{key}: {value}")
+                continue
+
+            # CASE A: The value is a simple String (like Description)
+            if isinstance(value, str):
+                processed_value = self._apply_global_attributes(value)
+                header_lines.append(f":{key}: {processed_value}")
+
+            # CASE B: The value is a List (like Keywords)
+            elif isinstance(value, list):
+                # We process every string inside the list
+                processed_list = [
+                    self._apply_global_attributes(item) if isinstance(item, str) else item 
+                    for item in value
+                ]
+                header_lines.append(f":{key}: {processed_list}")
+
+            # CASE C: Anything else (numbers, booleans)
+            else:
                 header_lines.append(f":{key}: {value}")
         
         # We add a revdate attribute with today's date to the header block, 
@@ -631,7 +643,7 @@ class DocConverter:
 
 
         # --- 7. IMAGE CONFIGURATION ---
-        KEEP_IMAGES_FOLDER_PREFIX = True 
+        KEEP_IMAGES_FOLDER_PREFIX = False
 
         # Path Formatting
         if KEEP_IMAGES_FOLDER_PREFIX:
