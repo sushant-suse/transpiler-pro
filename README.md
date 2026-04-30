@@ -1,15 +1,16 @@
 # 🚀 Transpiler-Pro
 
-**Transpiler-Pro** is an enterprise-grade documentation pipeline designed to transform **Markdown** into **Antora-compliant AsciiDoc**. Tailored specifically for SUSE technical standards, it goes beyond simple conversion by utilizing Natural Language Processing (NLP) to "heal" linguistic errors, shift tenses, and enforce branding.
+**Transpiler-Pro** is an enterprise-grade documentation pipeline designed to transform **Markdown** into AsciiDoc. Tailored specifically for SUSE technical standards, it goes beyond simple conversion by utilizing Natural Language Processing (NLP) to "heal" linguistic errors, shift tenses, enforce branding, and prepare the output for multiple publishing formats (HTML, XML, and PDF).
 
 ## 📌 Core Mission
 
-Transitioning legacy Markdown to AsciiDoc often results in "broken" UI components (tabs, collapsibles) and inconsistent grammar. Transpiler-Pro automates the tedious parts of this migration through four key pillars:
+Transitioning legacy Markdown to AsciiDoc often results in "broken" UI components (tabs, collapsibles), dead links, and inconsistent grammar. Transpiler-Pro automates the tedious parts of this migration through five key pillars:
 
-1. **Structural Integrity & SEO Stability** - Converts complex Markdown (Admonitions, Collapsibles, Tables) into Antora-compliant AsciiDoc while "freezing" headers with hardcoded, SEO-friendly anchors to prevent broken links during renames.
-2. **Style Validation** - Checks content against the official **SUSE Vale Style Guide**.
-3. **Linguistic Healing** - Uses AI to automatically fix future tense and wordiness while maintaining subject-verb agreement.
-4. **Content Parity Audit** - **(New)** Automatically validates that no text, code blocks, or headings were lost during the conversion process via a high-fidelity parity engine.
+1. **Structural Integrity & SEO Stability** - Converts complex Markdown into Antora-compliant AsciiDoc while "freezing" headers with hardcoded, SEO-friendly anchors to prevent broken links.
+2. **Dynamic White-Labeling** - Automatically maps hardcoded product names to centralized Antora `{attributes}`, ensuring single-source-of-truth branding.
+3. **Style Validation** - Checks content against the official SUSE Vale Style Guide.
+4. **Linguistic Healing** - Uses AI to automatically fix future tense and wordiness while maintaining subject-verb agreement.
+5. **Content Parity Audit** - Automatically validates that no text, code blocks, or headings were lost during the conversion process via a high-fidelity parity engine.
 
 ## ⚙️ The "Shield-Convert-Repair-Audit" Architecture
 
@@ -19,9 +20,11 @@ Transpiler-Pro operates using a multi-stage "Transformation and Healing" process
 
 Standard converters often mangle Docusaurus-style components or generate unstable IDs.
 
-* **Shielding Engine** - Uses a "Shield-Body-End" tokenization strategy to protect complex blocks (like `:::note`) from being mangled by the underlying conversion logic.
-* **The "Slug & Freeze" ID Engine** - Automatically injects unique, persistent anchors (for example, `[#access-keys-security]`) into every heading. This ensures URL stability for SEO and prevents dead links if titles are changed.
-* **Asset Mirroring** - Detects and copies non-Markdown files (for example, `_category_.yml`, images) to maintain the exact project hierarchy.
+* **Shielding Engine** - Uses a "Shield-Body-End" tokenization strategy to protect complex blocks (like `:::note` or `<JsonDisplay>`) from being mangled.
+* **The "Slug & Freeze" ID Engine** - Automatically injects unique, persistent anchors (e.g., `[#access-keys]`) into every heading. It is fully DocBook-aware, dynamically switching to `[id="..."]` syntax if a title contains dots, ensuring valid enterprise XML builds.
+* **Antora Cross-Reference Router** - Safely translates relative Markdown links into strict Antora xref:file.adoc#anchor[Text] macros.
+* **PDF-Ready Image Scaling** - Automatically scans all images and dynamically injects `pdfwidth=100%,scalewidth=100%` parameters, ensuring screenshots scale perfectly when building PDFs via DAPS or Antora.
+* **Attribute & Asset Orchestration** - Detects non-Markdown files (`.yml`, images) for exact project mirroring. Furthermore, it dynamically auto-generates the master `attributes.adoc` file containing all SUSE product variables.
 
 ### Phase Y - Linguistic Repair (The NLP Engine)
 
@@ -102,17 +105,17 @@ uv run transpiler-pro sync
 
 ### 1. Full Pipeline (The "Golden" Path)
 
-The `full-run` command orchestrates the entire sequence (**Sync ➜ Convert ➜ Repair ➜ Audit**). This is the recommended way to ensure your content is structurally stable, linguistically "healed," and verified for zero content loss.
+The `full-run` command orchestrates the entire sequence (**Sync ➜ Convert ➜ Repair ➜ Audit**). This is the recommended way to ensure your content is structurally stable, linguistically "healed," and verified for zero content loss. It also generates an auto-generated `attributes.adoc` file in the base directory of the generated output.
 
 ```bash
-# Option A: Standard run using default data/ folders
+# Option A: Bypass the audit for large-scale rapid prototyping
+uv run transpiler-pro full-run --no-audit
+
+# Option B: Standard run using default data/ folders
 uv run transpiler-pro full-run
 
-# Option B: Target external directories (Enterprise Portability)
+# Option C: Target external directories (Enterprise Portability)
 uv run transpiler-pro full-run --input ~/my-project/docs --output ~/my-project/dist
-
-# Option C: Bypass the audit for large-scale rapid prototyping
-uv run transpiler-pro full-run --no-audit
 ```
 
 ### 2. Individual Phase Control
@@ -124,11 +127,11 @@ For granular debugging or specialized workflows, you can trigger individual phas
 Converts Markdown to AsciiDoc, injects SEO-friendly persistent IDs, and mirrors assets (images, `.yml`) to the output path.
 
 ```bash
-# Convert Markdown to AsciiDoc by providing input and output directories
-uv run transpiler-pro x-convert --input ./raw-md --output ./intermediate-adoc
-
 # If you want to use the default data/ folders, simply run:
 uv run transpiler-pro x-convert
+
+# Convert Markdown to AsciiDoc by providing input and output directories
+uv run transpiler-pro x-convert --input ./raw-md --output ./intermediate-adoc
 ```
 
 #### Phase Y: Linguistic Healing
@@ -136,11 +139,11 @@ uv run transpiler-pro x-convert
 Processes AsciiDoc files through the NLP engine to fix future tense, apply branding rules, and resolve subject-verb agreement.
 
 ```bash
-# Run the repair phase with custom paths
-uv run transpiler-pro y-repair --input ./intermediate-adoc --output ./final-adoc
-
 # If you want to use the default data/ folders, simply run:
 uv run transpiler-pro y-repair
+
+# Run the repair phase with custom paths
+uv run transpiler-pro y-repair --input ./intermediate-adoc --output ./final-adoc
 ```
 
 #### Phase S: Style Synchronization
@@ -160,11 +163,11 @@ Transpiler-Pro includes two distinct layers of quality control to ensure "Techni
 This verifies that no technical information was lost. It performs a high-fidelity token comparison between the source Markdown and the generated AsciiDoc, filtering out formatting noise.
 
 ```bash
-# Verify integrity between any two directories
-uv run transpiler-pro audit --input ./source-md --output ./converted-adoc
-
 # If you want to use the default data/ folders, simply run:
 uv run transpiler-pro audit
+
+# Verify integrity between any two directories
+uv run transpiler-pro audit --input ./source-md --output ./converted-adoc
 ```
 
 #### 2. Asciidoctor Build Check (The "Check" Command)
@@ -172,14 +175,17 @@ uv run transpiler-pro audit
 The ultimate syntax test. It renders your `.adoc` files into a mirrored HTML preview folder using the official `asciidoctor` parser. It is configured to fail on `WARN` to catch duplicate IDs or broken macros.
 
 ```bash
+# Generate a complete HTML preview in data/build-preview/html directory
+uv run transpiler-pro check
+
+# Generate the xml in data/build-preview/xml directory
+uv run transpiler-pro check --docbook
+
 # Generate a complete HTML preview in a sandbox directory
 uv run transpiler-pro check --input ./final-adoc --build-dir ./preview-html
 
 # Target a specific file for rapid syntax debugging
 uv run transpiler-pro check --file instance.adoc --input ./data/outputs
-
-# If you want to use the default data/ folders, simply run:
-uv run transpiler-pro check --file instance.adoc
 ```
 
 ### Targeted Processing
