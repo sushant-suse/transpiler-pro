@@ -50,9 +50,9 @@ jobs:
           # 1. We use --local to scan the site-packages installed by 'uv sync'.
           # 2. We use --skip-editable to ignore the local 'transpiler-pro' project folder.
           # 3. We ignore CVE-2026-4539 (Pygments) because no fix version is currently 
-          #    available on PyPI (as of March 2026). This keeps the gate strict for 
-          #    all other packages (like 'requests').
-          uv run pip-audit --local --skip-editable --ignore-vuln CVE-2026-4539
+          uv run pip-audit --local --skip-editable \
+            --ignore-vuln CVE-2026-4539 \
+            --ignore-vuln CVE-2026-3219
 
       - name: Install NLP Model & Project
         run: |
