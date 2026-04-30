@@ -130,6 +130,12 @@ class LinguisticEngine:
         # that were merged during the NLP phase without risking regex collisions. 
         final_text = final_text.replace("&#45;", "-")
 
+        # --- 6. SANITY CHECK (The "Anti-Hallucination" Filter) ---
+        # Catch errors created by the NLP tense shifter
+        final_text = final_text.replace(" bes able", " is able")
+        final_text = final_text.replace(" no longer bes ", " no longer is ")
+        final_text = final_text.replace(" certain other ", " some other ")
+
         return final_text
     
 
