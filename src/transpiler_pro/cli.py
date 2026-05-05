@@ -120,6 +120,7 @@ def convert_x(
     file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific file within the input directory"),
     input_path: Path = typer.Option(INPUT_DIR, "--input", "-i", help="Custom path to find input files"),
     output_path: Path = typer.Option(INTERMEDIATE_DIR, "--output", "-o", help="Custom path to store intermediate files"),
+    doctype: str = typer.Option("article", "--doctype", help="Set the AsciiDoc doctype (e.g., article, book)"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
 ) -> None:
     """
@@ -136,6 +137,7 @@ def convert_x(
         file_name (Optional[str]): If provided, only this specific file will be processed.
         input_path (Path): The directory to scan for source files.
         output_path (Path): The directory to store converted files and mirrored assets.
+        doctype (str): The AsciiDoc doctype to set in the header (defaults to "article").
         config (str): Optional path to the configuration file for converter settings.
 
     Returns:
@@ -144,6 +146,9 @@ def convert_x(
     config_path = Path(config)
     pipeline_config = load_config(config_path)
     converter = DocConverter(config_path=config_path)
+    
+    # Inject the doctype directly into the converter instance
+    converter.doctype = doctype 
 
     # Resolve absolute paths for the provided input and output locations
     src_dir = Path(input_path).resolve()
@@ -304,6 +309,7 @@ def execute_full_pipeline(
     file_name: Optional[str] = typer.Option(None, "--file", "-f", help="Target a specific file path"),
     input_path: Path = typer.Option(INPUT_DIR, "--input", "-i", help="Custom path to find source Markdown files"),
     output_path: Path = typer.Option(OUTPUT_DIR, "--output", "-o", help="Custom path to store final healed AsciiDoc files"),
+    doctype: str = typer.Option("article", "--doctype", help="Set the AsciiDoc doctype (e.g., article, book)"),
     sync: bool = typer.Option(True, "--sync/--no-sync", help="Pull latest styles before running"),
     audit: bool = typer.Option(True, "--audit/--no-audit", help="Automatically run parity check after repair"),
     config: str = typer.Option(str(DEFAULT_CONFIG), "--config", "-c")
@@ -319,6 +325,7 @@ def execute_full_pipeline(
         file_name (Optional[str]): If provided, only this specific file will be processed.
         input_path (Path): The directory to scan for source Markdown files.
         output_path (Path): The directory to store final healed AsciiDoc files.
+        doctype (str): The AsciiDoc doctype to set in the header (defaults to "article").
         sync (bool): Flag to enable or disable the style synchronization step.
         audit (bool): Flag to enable or disable the automatic parity check after repair.
         config (str): Optional path to the configuration file for pipeline settings.
@@ -344,6 +351,7 @@ def execute_full_pipeline(
         file_name=file_name, 
         input_path=input_path, 
         output_path=INTERMEDIATE_DIR, 
+        doctype=doctype,
         config=config
     )
     

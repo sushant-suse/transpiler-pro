@@ -269,8 +269,12 @@ class DocConverter:
             self.protected_html_tags.append(match.group(1))
             return placeholder
 
-        # 8. Shield structural tags (div, ul, li) but let Pandoc handle <span> natively
+        # 8a. Shield structural tags (div, ul, li) but let Pandoc handle <span> natively
         content = re.sub(r'(</?(?:div|ul|li)[^>]*>)', shield_layout_tag, content, flags=re.IGNORECASE)
+
+        # 8b. Shield <kbd> tags safely without applying HTML passthroughs (+++)
+        content = re.sub(r'(?i)<kbd>', 'KBDSHIELDSTART', content)
+        content = re.sub(r'(?i)</kbd>', 'KBDSHIELDEND', content)
 
         # Ensure that we shield any custom patterns defined in the configuration, such as collapsibles or tabs, 
         # before Pandoc sees them.
@@ -469,6 +473,14 @@ class DocConverter:
         content = re.sub(r'IDSHIELDSTART.*?IDSHIELDEND', '', content)
         content = self._apply_global_attributes(content)
 
+        # UI MACROS (Keyboard)
+        # 1. Convert KBD shields to AsciiDoc kbd:[] macros
+        content = re.sub(r'KBDSHIELDSTART(.*?)KBDSHIELDEND', r'kbd:[\1]', content)
+        
+        # 2. Merge adjacent kbd macros separated by a plus OR Pandoc's {plus}
+        content = re.sub(r'kbd:\[([^\]]+)\]\s*(?:\+|\{plus\})\s*kbd:\[([^\]]+)\]', r'kbd:[\1+\2]', content)
+        content = re.sub(r'kbd:\[([^\]]+)\]\s*(?:\+|\{plus\})\s*kbd:\[([^\]]+)\]', r'kbd:[\1+\2]', content)
+
         # Header Block: Uses the same smart ID logic for the Title
         header_lines = [
             smart_id_format(title_slug),
@@ -476,6 +488,15 @@ class DocConverter:
             ":idprefix:",
             ":idseparator: -"
         ]
+
+        # Inject doctype (defaults to 'article' if not set via CLI)
+        doctype = getattr(self, 'doctype', 'article')
+        if doctype != 'article':
+            header_lines.append(f":doctype: {doctype}")
+
+        # Inject the experimental flag if UI macros like kbd:[] are detected in the content
+        if "kbd:[" in content:
+            header_lines.append(":experimental:")
         
         # Apply branding attributes to metadata values as well
         for key, value in self.metadata.items():
