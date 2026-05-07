@@ -332,7 +332,15 @@ class DocConverter:
         # 11. We apply the shielding function to any <JsonDisplay> components found in the content, 
         # ensuring that they are safely stored and replaced with unique placeholders before Pandoc processing.
         content = re.sub(r'(<JsonDisplay.*?\/>)', shield_json_display, content, flags=re.DOTALL)
-        content = re.sub(r'\{#(.*?)\}', r'IDSHIELDSTART\1IDSHIELDEND', content)
+        
+        # Protect HTML comments from being deleted by Pandoc
+        # We concatenate the pattern so Markdown parsers don't hide it as a real comment!
+        comment_pattern = r'<' + r'!--(.*?)-->'
+        content = re.sub(comment_pattern, lambda m: f"HTMLCOMMENTSHIELD{m.group(1)}HTMLCOMMENTEND", content, flags=re.DOTALL)
+
+        # Shield custom IDs {#id}, but use a Negative Lookbehind (?<!\{) 
+        # so we DO NOT accidentally capture Handlebars block helpers like {{#if}}
+        content = re.sub(r'(?<!\{)\{#(.*?)\}', r'IDSHIELDSTART\1IDSHIELDEND', content)
 
         return content
     
@@ -435,8 +443,11 @@ class DocConverter:
             # Ensure only ONE return statement exists here
             return f'\n{id_block}\n{level_chars} {display_title}'
 
-        # Apply anchors to headers
-        content = re.sub(r'\n(={2,6})\s+([^\n]+)', heading_anchor_logic, content)
+        # Prepend a temporary newline to guarantee the absolute first line is caught
+        content = "\n" + content
+
+        # Apply anchors to headers (Horizontal space [^\S\r\n]+ protects ==== admonition blocks)
+        content = re.sub(r'\n(={2,6})[^\S\r\n]+([^\n]+)', heading_anchor_logic, content)
 
         # --- 2. THE CLOAK ---
         if hasattr(self, 'heading_vault'):
@@ -742,6 +753,31 @@ class DocConverter:
         content = content.replace("SHIELDADMONSTARTtabs", "[tabs]\n====")
         content = content.replace("SHIELDADMONEND", "====")
         content = re.sub(r'^@tab\s+(.*)$', r'\1::', content, flags=re.M)
+
+        # --- 9. DAPS & LOSANT EDGE CASES ---
+        
+        # Escape Handlebars templates ({{ }}) so DAPS doesn't mistake them for attributes.
+        content = content.replace("{{{", "\\{\\{\\{").replace("{{", "\\{\\{")
+        content = content.replace("++\\{\\{\\{++", "\\{\\{\\{").replace("++\\{\\{++", "\\{\\{")
+
+        # Clean up custom Losant admonition artifacts (.BODY and ENDADMON)
+        content = re.sub(
+            r'\s*\.BODY(.*?)(?:\.?ENDADMON)', 
+            lambda m: f"\n====\n{m.group(1).strip()}\n====", 
+            content, 
+            flags=re.S
+        )
+
+        # [FIX 3] Clean up leaked Docusaurus Admonition Shields (e.g., SHIELDADMONSTARTtipTITLE -> [TIP])
+        content = re.sub(r'SHIELDADMONSTART([a-zA-Z]+)TITLE[^\n]*', lambda m: f"[{m.group(1).upper()}]", content)
+
+        # [FIX 4] Restore HTML comments as AsciiDoc multi-line comment blocks (////)
+        content = re.sub(
+            r'HTMLCOMMENTSHIELD(.*?)HTMLCOMMENTEND', 
+            lambda m: f"////\n{m.group(1).strip()}\n////\n", 
+            content, 
+            flags=re.DOTALL
+        )
 
         return header_block + content.strip()
     

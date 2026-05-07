@@ -156,7 +156,11 @@ class LinguisticEngine:
         sorted_keys = sorted(self.kb.keys(), key=len, reverse=True)
         for key in sorted_keys:
             replacement = self.kb[key]
-            if not replacement or str(replacement).lower() in ["spellings", "spelling", "learned", "none", "val"]:
+            
+            # [GLOBAL GUARDRAIL] 
+            # We strictly enforce 1-to-1 replacements (e.g., 'suse' -> 'SUSE').
+            # If a rule tries to blindly delete a word (empty string), we safely ignore it.
+            if not replacement or not any(char.isalnum() for char in str(replacement)):
                 continue
             
             pattern = rf"(?i)\b{re.escape(key)}\b"
