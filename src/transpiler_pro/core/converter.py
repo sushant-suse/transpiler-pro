@@ -674,19 +674,41 @@ class DocConverter:
                     content = re.sub(r.get("regex"), r.get("replacement"), content, flags=re.S)
 
 
-        # --- 7. IMAGE CONFIGURATION ---
-        KEEP_IMAGES_FOLDER_PREFIX = False
+        # --- 7. PATH & IMAGE CONFIGURATION ---
+        # Use these flags to control how file includes and images are referenced.
+        # This is useful for aligning with different static site generators (like Antora).
+    
+        # POSSIBILITIES TABLE:
+        # 1. Traversal=False, KeepPrefix=False -> image::devices/add.png[]                (Flat structure)
+        # 2. Traversal=True,  KeepPrefix=False -> image::../devices/add.png[]             (Nested, no 'images' folder)
+        # 3. Traversal=False, KeepPrefix=True  -> image::images/devices/add.png[]         (Standard Markdown style)
+        # 4. Traversal=True,  KeepPrefix=True  -> image::../images/devices/add.png[].     (Nested with 'images' folder)
+        # -------------------------------------------------------------------------------
+        USE_RELATIVE_TRAVERSAL = True     # Injects '../' to move up one directory
+        KEEP_IMAGES_FOLDER_PREFIX = False # Keeps or strips the 'images/' directory name
+        # -------------------------------------------------------------------------------
 
-        # Path Formatting
+        # 1. PROCESS INCLUDES
+        # Ensures cross-file references match the requested directory depth.
+        if USE_RELATIVE_TRAVERSAL:
+            # Negative lookahead (?!\.\./) prevents doubling: ../ doesn't become ../../
+            content = re.sub(r'include::(?!\.\./)([^\[\n]+)', r'include::../\1', content)
+
+        # 2. PROCESS IMAGES
+        # Dynamically builds the image path based on the flags above.
         if KEEP_IMAGES_FOLDER_PREFIX:
-            # Result: image::images/devices/add.png[...]
-            content = re.sub(r'(image::?)/([^\[]+)\[', r'\1\2[', content)
+            prefix = "../images/" if USE_RELATIVE_TRAVERSAL else "images/"
+            # Detects /images/, images/, or / and replaces with our dynamic prefix
+            content = re.sub(r'(image::?)/?images/([^\[]+)\[', rf'\1{prefix}\2[', content)
         else:
-            # Result: image::devices/add.png[...]
-            content = re.sub(r'(image::?)/?images/([^\[]+)\[', r'\1\2[', content)
+            prefix = "../" if USE_RELATIVE_TRAVERSAL else ""
+            content = re.sub(r'(image::?)/?images/([^\[]+)\[', rf'\1{prefix}\2[', content)
 
-        # Stripping redundant titles (where title is the same as filename)
-        # content = re.sub(r'(image::?[^\[]+)\[(.*?)(?:,title="\2")\]', r'\1[\2]', content)
+        # 3. SAFETY CATCH
+        # Catches any images that didn't use the 'images/' folder but still need traversal.
+        if USE_RELATIVE_TRAVERSAL:
+            # Excludes URLs (http), absolute paths (/), and already-traversed paths (../)
+            content = re.sub(r'(image::?)(?!\.\./|/|http)([^\[\n]+)\[', r'\1../\2[', content)
 
         # Default Scaling for ALL brackets (empty or populated)
         def inject_image_scaling(m: re.Match) -> str:
