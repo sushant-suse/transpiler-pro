@@ -112,6 +112,10 @@ class ParityValidator:
             text = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", text)
             text = re.sub(r":::\w+", "", text)
             text = re.sub(r"#{1,6}\s+", "", text)
+
+            # Strip Docusaurus specific structural artifacts to prevent false positives
+            text = re.sub(r"(?i)\.BODY|ENDADMON", " ", text)
+            text = re.sub(r"^\[(?:TIP|NOTE|WARNING|CAUTION|IMPORTANT)\]\s*", "", text, flags=re.M)
             
             # 4. Handle Markdown HTML entities (fixes the 'x27' / '&#x27;' issue)
             import html
