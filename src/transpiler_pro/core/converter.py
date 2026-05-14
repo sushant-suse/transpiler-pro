@@ -363,10 +363,13 @@ class DocConverter:
         self.used_ids = set() 
         today = datetime.now().strftime("%Y-%m-%d")
 
-        # --- ID STRATEGY TOGGLE ---
+        # --- GLOBAL BUILD FLAGS ---
+        # --- 1. ID STRATEGY TOGGLE ---
         # Set to True for SUSE-style [#id] shorthand
         # Set to False for long-form [id="id"]
         USE_SUSE_SHORTHAND = True
+        # --- 2. DAPS COMPATIBILITY MODE ---
+        DAPS_COMPATIBILITY_MODE = True
 
         def smart_id_format(final_id: str) -> str:
             """
@@ -493,9 +496,10 @@ class DocConverter:
         content = re.sub(r'kbd:\[([^\]]+)\]\s*(?:\+|\{plus\})\s*kbd:\[([^\]]+)\]', r'kbd:[\1+\2]', content)
 
         # Header Block: Uses the same smart ID logic for the Title
+        main_heading = "==" if DAPS_COMPATIBILITY_MODE else "="
         header_lines = [
             smart_id_format(title_slug),
-            f"= {title_text}",
+            f"{main_heading} {title_text}",
             ":idprefix:",
             ":idseparator: -"
         ]
@@ -672,6 +676,25 @@ class DocConverter:
                     # If no mapping is provided, we simply apply the regex substitution using the provided pattern and replacement string,
                     # allowing for straightforward restoration based on the defined regex and replacement in the configuration.
                     content = re.sub(r.get("regex"), r.get("replacement"), content, flags=re.S)
+        
+        # --- OLD IMAGE HANDLING LOGIC START (OBSOLETE) ---
+        # Previous image handling logic is now obsolete and replaced by the more flexible configuration-driven approach below.
+        # --- 7. IMAGE CONFIGURATION ---
+        # KEEP_IMAGES_FOLDER_PREFIX = False
+
+        # # Path Formatting
+        # if KEEP_IMAGES_FOLDER_PREFIX:
+        #     # Result: image::images/devices/add.png[...]
+        #     content = re.sub(r'(image::?)/([^\[]+)\[', r'\1\2[', content)
+
+        # else:
+        #     # Result: image::devices/add.png[...]
+        #     content = re.sub(r'(image::?)/?images/([^\[]+)\[', r'\1\2[', content)
+        
+        # Stripping redundant titles (where title is the same as filename)
+        # content = re.sub(r'(image::?[^\[]+)\[(.*?)(?:,title="\2")\]', r'\1[\2]', content)
+
+        # --- OLD INCLUDE HANDLING LOGIC END (OBSOLETE) ---
 
 
         # --- 7. PATH & IMAGE CONFIGURATION ---
@@ -682,60 +705,65 @@ class DocConverter:
         # 1. Traversal=False, KeepPrefix=False -> image::devices/add.png[]                (Flat structure)
         # 2. Traversal=True,  KeepPrefix=False -> image::../devices/add.png[]             (Nested, no 'images' folder)
         # 3. Traversal=False, KeepPrefix=True  -> image::images/devices/add.png[]         (Standard Markdown style)
-        # 4. Traversal=True,  KeepPrefix=True  -> image::../images/devices/add.png[].     (Nested with 'images' folder)
+        # 4. Traversal=True,  KeepPrefix=True  -> image::../images/devices/add.png[]      (Nested with 'images' folder)
         # -------------------------------------------------------------------------------
         USE_RELATIVE_TRAVERSAL = True     # Injects '../' to move up one directory
-        KEEP_IMAGES_FOLDER_PREFIX = False # Keeps or strips the 'images/' directory name
+        KEEP_IMAGES_FOLDER_PREFIX = True  # Retains the 'images/' folder in the path, common for standard AsciiDoc setups.
         # -------------------------------------------------------------------------------
 
-        # 1. PROCESS INCLUDES
-        # Ensures cross-file references match the requested directory depth.
-        if USE_RELATIVE_TRAVERSAL:
-            # Negative lookahead (?!\.\./) prevents doubling: ../ doesn't become ../../
-            content = re.sub(r'include::(?!\.\./)([^\[\n]+)', r'include::../\1', content)
+        # 1. FIX INLINE SQUASHING & ESCAPING
+        content = content.replace("++[]++", "[]")
+        # Ensure block-level elements are separated onto new lines
+        content = re.sub(r'(?i)(\.adoc\[\]|\])\s+(image::?|include::)', r'\1\n\n\2', content)
 
-        # 2. PROCESS IMAGES
-        # Dynamically builds the image path based on the flags above.
+        # 2. NORMALIZE IMAGE TAGS
+        # Pandoc sometimes spits out 'Image:' (single colon, capitalized).
+        # \b matches the word boundary, (?=[^\s]) ensures it's attached to a path (no spaces).
+        # This prevents turning conversational text like "Here is an image: " into "image:: "
+        content = re.sub(r'(?i)\bimage::?(?=[^\s])', 'image::', content)
+
+        # 3. PROCESS INCLUDES
+        if USE_RELATIVE_TRAVERSAL:
+            content = re.sub(r'(include::)(?!(\.\./|http))([^\[\n\s]+)', r'\1../\3', content)
+
+        # 4. PROCESS IMAGES
+        traversal = "../" if USE_RELATIVE_TRAVERSAL else ""
+
         if KEEP_IMAGES_FOLDER_PREFIX:
-            prefix = "../images/" if USE_RELATIVE_TRAVERSAL else "images/"
-            # Detects /images/, images/, or / and replaces with our dynamic prefix
-            content = re.sub(r'(image::?)/?images/([^\[]+)\[', rf'\1{prefix}\2[', content)
+            # Result: image::../images/devices/add.png[...]
+            # Strips the leading slash (if any) and injects the traversal
+            content = re.sub(r'(image::)/?(?!\.\./|http)([^\[\n]+)\[', rf'\1{traversal}\2[', content)
         else:
-            prefix = "../" if USE_RELATIVE_TRAVERSAL else ""
-            content = re.sub(r'(image::?)/?images/([^\[]+)\[', rf'\1{prefix}\2[', content)
+            # Result: image::../devices/add.png[...]
+            # Strips leading slash AND the 'images/' folder, then injects traversal
+            content = re.sub(r'(image::)/?(?:images/)?(?!\.\./|http)([^\[\n]+)\[', rf'\1{traversal}\2[', content)
 
-        # 3. SAFETY CATCH
-        # Catches any images that didn't use the 'images/' folder but still need traversal.
-        if USE_RELATIVE_TRAVERSAL:
-            # Excludes URLs (http), absolute paths (/), and already-traversed paths (../)
-            content = re.sub(r'(image::?)(?!\.\./|/|http)([^\[\n]+)\[', r'\1../\2[', content)
-
-        # Default Scaling for ALL brackets (empty or populated)
-        def inject_image_scaling(m: re.Match) -> str:
+        # 5. INJECT MISSING ATTRIBUTES
+        # Ensures every image gets the standard Losant rendering attributes
+        def append_attrs(match) -> str:
             """
-            Injects default pdfwidth and scalewidth attributes into image macros, while preserving existing attributes and preventing duplication if scaling attributes already exist.
+            Appends standard rendering attributes to image tags if they are missing.
 
             Args:
-                m: The regex match object for an image macro, containing the path and existing attributes.
-            Returns:
-                str: The modified image macro with pdfwidth and scalewidth attributes injected, while preserving existing attributes and preventing duplication if scaling attributes already exist.
-            """
-            path = m.group(1)
-            attrs = m.group(2).strip()
-            
-            # Prevent duplicating scaling attributes if they already exist
-            if "pdfwidth" in attrs or "scalewidth" in attrs:
-                return m.group(0)
-                
-            # If attributes (like alt text or title) already exist, append scaling with a comma.
-            if attrs:
-                return f"image::{path}[{attrs},pdfwidth=100%,scalewidth=100%]"
-            
-            # Otherwise, just insert scaling.
-            return f"image::{path}[pdfwidth=100%,scalewidth=100%]"
+                match (re.Match): The regex match object for an image tag.
 
-        # This regex strictly captures the path in group 1, and everything inside the brackets in group 2
-        content = re.sub(r'image::([^\[]+)\[([^\]]*)\]', inject_image_scaling, content)
+            Returns:
+                str: The image tag with the standard attributes appended.
+            """
+            # We extract the image path and the existing attribute block from the matched image tag.
+            img_path = match.group(1)
+            attr_block = match.group(2)
+            
+            # If the attributes are already there, skip
+            if "pdfwidth" in attr_block:
+                return match.group(0)
+                
+            # Otherwise, append them cleanly
+            if attr_block:
+                return f"{img_path}[{attr_block},pdfwidth=100%,scalewidth=100%]"
+            return f"{img_path}[pdfwidth=100%,scalewidth=100%]"
+
+        content = re.sub(r'(image::[^\[\n]+)\[([^\]\n]*)\]', append_attrs, content)
         
         # --- 8. ANTORA XREFS ---
         def antora_xref_logic(m: re.Match) -> str:
@@ -776,13 +804,26 @@ class DocConverter:
         content = content.replace("SHIELDADMONEND", "====")
         content = re.sub(r'^@tab\s+(.*)$', r'\1::', content, flags=re.M)
 
-        # --- 9. DAPS & LOSANT EDGE CASES ---
-        
-        # Escape Handlebars templates ({{ }}) so DAPS doesn't mistake them for attributes.
-        content = content.replace("{{{", "\\{\\{\\{").replace("{{", "\\{\\{")
-        content = content.replace("++\\{\\{\\{++", "\\{\\{\\{").replace("++\\{\\{++", "\\{\\{")
+        # --- 9. DAPS COMPATIBILITY MODE ---
+        # Set to True if building with DAPS (DocBook XML requires specific escaping and header nesting).
+        # Set to False if building with Antora or standard Asciidoctor.
+        DAPS_COMPATIBILITY_MODE = True
 
-        # Clean up custom Losant admonition artifacts (.BODY and ENDADMON)
+        if DAPS_COMPATIBILITY_MODE:
+            # A. HEADING DEMOTION
+            # DAPS/DocBook crashes if included modular files start with a Level 0 (=) Book Part header.
+            # This shifts all headings down by one level (= becomes ==, == becomes ===)
+            content = re.sub(r'^(={1,5})[ \t]+', r'\1= ', content, flags=re.MULTILINE)
+
+            # B. ESCAPE HANDLEBARS
+            # Escape Handlebars templates ({{ }}) so DAPS doesn't mistake them for unresolvable attributes.
+            content = content.replace("{{{", "\\{\\{\\{").replace("{{", "\\{\\{")
+            content = content.replace("++\\{\\{\\{++", "\\{\\{\\{").replace("++\\{\\{++", "\\{\\{")
+
+        # --- 10. FINAL ARTIFACT CLEANUP ---
+        # These are general transpiler artifacts that need to be cleaned up regardless of the build system.
+
+        # Clean up custom admonition artifacts (.BODY and ENDADMON)
         content = re.sub(
             r'\s*\.BODY(.*?)(?:\.?ENDADMON)', 
             lambda m: f"\n====\n{m.group(1).strip()}\n====", 
@@ -790,10 +831,10 @@ class DocConverter:
             flags=re.S
         )
 
-        # [FIX 3] Clean up leaked Docusaurus Admonition Shields (e.g., SHIELDADMONSTARTtipTITLE -> [TIP])
-        content = re.sub(r'SHIELDADMONSTART([a-zA-Z]+)TITLE[^\n]*', lambda m: f"[{m.group(1).upper()}]", content)
+        # Clean up leaked Docusaurus Admonition Shields
+        content = re.sub(r'SHIELDADMONSTART([a-zA-Z]+)TITLE\s*', lambda m: f"[{m.group(1).upper()}]\n", content)
 
-        # [FIX 4] Restore HTML comments as AsciiDoc multi-line comment blocks (////)
+        # Restore HTML comments as AsciiDoc multi-line comment blocks (////)
         content = re.sub(
             r'HTMLCOMMENTSHIELD(.*?)HTMLCOMMENTEND', 
             lambda m: f"////\n{m.group(1).strip()}\n////\n", 
