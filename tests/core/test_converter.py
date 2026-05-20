@@ -60,4 +60,4 @@ def test_pandoc_call_construction(converter, monkeypatch, tmp_path):
     # Assert Pandoc was the chosen engine
     assert called_cmds[0][0] == "pandoc"
     assert "-f" in called_cmds[0]
-    assert "markdown" in called_cmds[0]
+    assert "markdown-smart" in called_cmds[0]
