@@ -1,0 +1,298 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Transpiler-Pro Project Portal</title>
+        <style>
+            body { font-family: -apple-system, sans-serif; display: flex; margin: 0; background: #f6f8fa; }
+            nav { width: 280px; background: #24292e; color: white; height: 100vh; padding: 25px 20px; position: fixed; box-sizing: border-box; }
+            nav h2 { color: #42b983; border-bottom: 2px solid #42b983; padding-bottom: 10px; margin-top: 0; }
+            nav a { color: #c8d1d9; display: block; padding: 12px 0; text-decoration: none; border-bottom: 1px solid #30363d; font-size: 0.95rem; }
+            nav a:hover { color: #42b983; }
+            main { margin-left: 280px; padding: 40px; background: white; min-height: 100vh; width: calc(100% - 280px); box-sizing: border-box; }
+            .markdown-body { max-width: 900px; margin: 0 auto; line-height: 1.6; color: #24292e; }
+            pre { background: #f6f8fa; padding: 16px; border-radius: 6px; border: 1px solid #ddd; overflow: auto; }
+        </style>
+    </head>
+    <body>
+        <nav>
+            <h2>🚀 Navigation</h2>
+            <a href="index.html">🏠 Home (README)</a>
+            <a href="transpiler_pro.html">📦 API Reference</a>
+            <a href="tests.html">🧪 Test Documentation</a>
+            <a href="coverage_report/index.html">📊 Coverage Report</a>
+            <a href="view-architecture.html">🏗️ System Architecture</a>
+        </nav>
+        <main>
+            <article class="markdown-body">
+                <h1>Transpiler-Pro</h1>
+
+<p><strong>Transpiler-Pro</strong> is an enterprise-grade documentation pipeline designed to transform <strong>Markdown</strong> into AsciiDoc. Tailored specifically for SUSE technical standards, it goes beyond simple conversion by utilizing Natural Language Processing (NLP) to "heal" linguistic errors, shift tenses, enforce branding, and prepare the output for multiple publishing formats (HTML, XML, and PDF).</p>
+
+<h2>Core Mission</h2>
+
+<p>Transitioning legacy Markdown to AsciiDoc often results in "broken" UI components (tabs, collapsibles), dead links, and inconsistent grammar. Transpiler-Pro automates the tedious parts of this migration through five key pillars:</p>
+
+<ol>
+<li><strong>Structural Integrity &amp; SEO Stability</strong> - Converts complex Markdown into Antora-compliant AsciiDoc while "freezing" headers with hardcoded, SEO-friendly anchors to prevent broken links.</li>
+<li><strong>Dynamic White-Labeling</strong> - Automatically maps hardcoded product names to centralized Antora <code>{attributes}</code>, ensuring single-source-of-truth branding.</li>
+<li><strong>Style Validation</strong> - Checks content against the official SUSE Vale Style Guide.</li>
+<li><strong>Linguistic Healing</strong> - Uses AI to automatically fix future tense and wordiness while maintaining subject-verb agreement.</li>
+<li><strong>Content Parity Audit</strong> - Automatically validates that no text, code blocks, or headings were lost during the conversion process via a high-fidelity parity engine.</li>
+</ol>
+
+<h2>⚙️ The "Shield-Convert-Repair-Audit" Architecture</h2>
+
+<p>Transpiler-Pro operates using a multi-stage "Transformation and Healing" process:</p>
+
+<h3>Phase X - Structural Conversion (The Converter)</h3>
+
+<p>Standard converters often mangle Docusaurus-style components or generate unstable IDs.</p>
+
+<ul>
+<li><strong>Shielding Engine</strong> - Uses a "Shield-Body-End" tokenization strategy to protect complex blocks (like <code>:::note</code> or <code>&lt;JsonDisplay&gt;</code>) from being mangled.</li>
+<li><strong>The "Slug &amp; Freeze" ID Engine</strong> - Automatically injects unique, persistent anchors (e.g., <code>[#access-keys]</code>) into every heading. It is fully DocBook-aware, dynamically switching to <code>[id="..."]</code> syntax if a title contains dots, ensuring valid enterprise XML builds.</li>
+<li><strong>UI Macro &amp; Doctype Intelligence</strong> - Safely detects HTML <code>&lt;kbd&gt;</code> tags, shields them from parser destruction, and converts them into native AsciiDoc <code>kbd:[Ctrl+C]</code> macros (handling multi-key merges). It contextually injects the <code>:experimental:</code> flag only when needed, and supports dynamic <code>:doctype:</code> configuration for compiling large PDF books.</li>
+<li><strong>Antora Cross-Reference Router</strong> - Safely translates relative Markdown links into strict Antora <code>xref:file.adoc#anchor[Text]</code> macros.</li>
+<li><strong>PDF-Ready Image Scaling</strong> - Automatically scans all images and dynamically injects <code>pdfwidth=100%,scalewidth=100%</code> parameters, ensuring screenshots scale perfectly when building PDFs via DAPS or Antora.</li>
+<li><strong>Attribute &amp; Asset Orchestration</strong> - Detects non-Markdown files (<code>.yml</code>, images) for exact project mirroring. Furthermore, it dynamically auto-generates the master <code>attributes.adoc</code> file containing all SUSE product variables.</li>
+</ul>
+
+<h3>Phase Y - Linguistic Repair (The NLP Engine)</h3>
+
+<p>Unlike simple find-and-replace tools, Transpiler-Pro understands <strong>context</strong> using the <strong>spaCy <code>en_core_web_sm</code></strong> model.</p>
+
+<ul>
+<li><strong>Dependency Parsing</strong> - It identifies the relationship between a subject and a verb (for example, "The user will execute").</li>
+<li><strong>Morphological Conjugation</strong> - It conjugates the head verb to the correct present tense form ("executes"), ensuring subject-verb agreement rather than just deleting words.</li>
+<li><strong>Surgical Edits</strong> - Edits are applied using character offsets to prevent "collision bugs" where fixing one word accidentally breaks another.</li>
+</ul>
+
+<h3>Phase Z - Content Parity Audit (The Validator)</h3>
+
+<p>To guarantee zero data loss, the pipeline concludes with a high-velocity validation engine optimized for technical documentation:</p>
+
+<ul>
+<li><strong>Component-Aware Scanning</strong> - Unlike standard diff tools, the validator "sees" inside React/JSX components (like <code>&lt;JsonDisplay&gt;</code>), ensuring complex JSON schemas and technical specs are preserved 1:1.</li>
+<li><strong>Technical Token Normalization</strong> - A specialized tokenizer filters out formatting "noise" (hex fragments, date fluctuations, and punctuation) to focus the audit on actual prose and critical API parameters.</li>
+<li><strong>High-Velocity Set Logic</strong> - Optimized using Set Theory and lazy-loading structural diffs, reducing audit times for large libraries from <strong>20 minutes to under 15 seconds</strong>.</li>
+</ul>
+
+<h2>📂 Project Structure</h2>
+
+<div class="codehilite">
+<pre><span></span><code>.
+├── src/transpiler_pro/
+│   ├── core/
+│   │   ├── converter.py    # Structural transformation, UI macros &amp; block restoration (Phase X)
+│   │   ├── linter.py       # Style sensing via Vale CLI
+│   │   ├── repair.py       # NLP-driven Tense &amp; Subject-Verb Agreement (Phase Y)
+│   │   ├── validator.py    # Content Parity &amp; Audit logic (Phase Z)
+│   │   └── fixer.py        # Rule-based repair (Spelling &amp; Branding)
+│   ├── cli.py              # Typer orchestration (The Entry Point)
+├── styles/suse-styles/     # Official SUSE Vale rulesets (Synced via Git)
+├── data/
+│   ├── inputs/             # Place your .md files here
+│   ├── intermediate/       # Raw .adoc conversions (Pre-repair)
+│   ├── audit-logs/         # Detailed parity reports (Phase Z evidence)
+│   ├── outputs/            # Final &quot;healed&quot; .adoc files
+│   └── knowledge_base.json # Branding &amp; Technical Term dictionary
+└── pyproject.toml          # Central configuration for the entire pipeline
+</code></pre>
+</div>
+
+<h2>🛠 Installation &amp; Setup</h2>
+
+<p>Follow these steps to set up the environment locally. Transpiler-Pro uses <code>uv</code> for lightning-fast, reproducible builds.</p>
+
+<h3>1. Prerequisites</h3>
+
+<p>Ensure you have the following installed on your system:</p>
+
+<ul>
+<li><strong>Python 3.12+</strong></li>
+<li><strong>uv</strong> (Recommended: <code>brew install uv</code> or <code>pip install uv</code>)</li>
+<li><strong>Pandoc</strong> (<code>brew install pandoc</code> or <code>zypper install pandoc</code>)</li>
+<li><strong>Vale CLI</strong> (<code>brew install vale</code> or <code>zypper install vale</code>)</li>
+</ul>
+
+<h3>2. Environment Setup</h3>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Clone the repository</span>
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/your-org/transpiler-pro.git
+<span class="nb">cd</span><span class="w"> </span>transpiler-pro
+
+<span class="c1"># Install Python dependencies and create virtual environment</span>
+uv<span class="w"> </span>sync
+
+<span class="c1"># Download the NLP Linguistic Model (Required for Phase Y &amp; Z)</span>
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>spacy<span class="w"> </span>download<span class="w"> </span>en_core_web_sm
+</code></pre>
+</div>
+
+<h3>3. Initialize Styles</h3>
+
+<p>Sync the official openSUSE style guide to your local machine:</p>
+
+<div class="codehilite">
+<pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>sync
+</code></pre>
+</div>
+
+<h2>🚀 Usage Guide</h2>
+
+<p><strong>Transpiler-Pro</strong> is designed for high portability. While it defaults to the internal <code>data/</code> directory structure, every command supports custom path flags, allowing you to target any external documentation repository.</p>
+
+<h3>1. Full Pipeline (The "Golden" Path)</h3>
+
+<p>The <code>full-run</code> command orchestrates the entire sequence (<strong>Sync ➜ Convert ➜ Repair ➜ Audit</strong>). This is the recommended way to ensure your content is structurally stable, linguistically "healed," and verified for zero content loss. It also generates an auto-generated <code>attributes.adoc</code> file in the base directory of the generated output.</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Option A: Standard run using default data/ folders (Implicit &#39;article&#39; doctype)</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>full-run
+
+<span class="c1"># Option B: Bypass the audit for large-scale rapid prototyping</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>full-run<span class="w"> </span>--no-audit
+
+<span class="c1"># Option C: Target external directories (Enterprise Portability)</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>full-run<span class="w"> </span>--input<span class="w"> </span>~/my-project/docs<span class="w"> </span>--output<span class="w"> </span>~/my-project/dist
+
+<span class="c1"># Option D: Prepare files for PDF Book Compilation (Injects :doctype: book)</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>full-run<span class="w"> </span>--doctype<span class="w"> </span>book
+</code></pre>
+</div>
+
+<h3>2. Individual Phase Control</h3>
+
+<p>For granular debugging or specialized workflows, you can trigger individual phases of the transformation engine.</p>
+
+<h4>Phase X: Structural Conversion</h4>
+
+<p>Converts Markdown to AsciiDoc, injects SEO-friendly persistent IDs, detects UI macros, and mirrors assets (images, <code>.yml</code>) to the output path.</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Standard conversion</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>x-convert
+
+<span class="c1"># Convert Markdown to AsciiDoc by providing custom directories and setting the doctype</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>x-convert<span class="w"> </span>--input<span class="w"> </span>./raw-md<span class="w"> </span>--output<span class="w"> </span>./intermediate-adoc<span class="w"> </span>--doctype<span class="w"> </span>book
+</code></pre>
+</div>
+
+<h4>Phase Y: Linguistic Healing</h4>
+
+<p>Processes AsciiDoc files through the NLP engine to fix future tense, apply branding rules, and resolve subject-verb agreement.</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Standard repair</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>y-repair
+
+<span class="c1"># Run the repair phase with custom paths</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>y-repair<span class="w"> </span>--input<span class="w"> </span>./intermediate-adoc<span class="w"> </span>--output<span class="w"> </span>./final-adoc
+</code></pre>
+</div>
+
+<h4>Phase S: Style Synchronization</h4>
+
+<p>Force-updates the local SUSE Vale style guides from the remote repository.</p>
+
+<div class="codehilite">
+<pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>sync
+</code></pre>
+</div>
+
+<h3>Verification &amp; Build Integrity</h3>
+
+<p>Transpiler-Pro includes two distinct layers of quality control to ensure "Technical Parity" and "Syntax Perfection."</p>
+
+<h4>1. Content Parity Audit (Phase Z)</h4>
+
+<p>This verifies that no technical information was lost. It performs a high-fidelity token comparison between the source Markdown and the generated AsciiDoc, filtering out formatting noise.</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Verify integrity using default folders</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>audit
+
+<span class="c1"># Verify integrity between any two custom directories</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>audit<span class="w"> </span>--input<span class="w"> </span>./source-md<span class="w"> </span>--output<span class="w"> </span>./converted-adoc
+</code></pre>
+</div>
+
+<h4>2. Asciidoctor Build Check (The "Check" Command)</h4>
+
+<p>The ultimate syntax test. It renders your <code>.adoc</code> files into a mirrored HTML preview folder using the official <code>asciidoctor</code> parser. It is configured to fail on <code>WARN</code> to catch duplicate IDs or broken macros.</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Generate a complete HTML preview in data/build-preview/html directory</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>check
+
+<span class="c1"># Generate the xml in data/build-preview/xml directory</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>check<span class="w"> </span>--docbook
+
+<span class="c1"># Generate a complete HTML preview in a sandbox directory</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>check<span class="w"> </span>--input<span class="w"> </span>./final-adoc<span class="w"> </span>--build-dir<span class="w"> </span>./preview-html
+
+<span class="c1"># Target a specific file for rapid syntax debugging</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>check<span class="w"> </span>--file<span class="w"> </span>instance.adoc<span class="w"> </span>--input<span class="w"> </span>./data/outputs
+</code></pre>
+</div>
+
+<h3>Targeted Processing</h3>
+
+<p>If you are working on a specific document and do not want to process the entire library, use the <code>--file</code> (or <code>-f</code>) flag. This works across <code>full-run</code>, <code>x-convert</code>, <code>y-repair</code>, and <code>check</code>.</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Run the entire pipeline for a single file (with explicit doctype)</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>full-run<span class="w"> </span>--file<span class="w"> </span>security-guide.md<span class="w"> </span>--doctype<span class="w"> </span>book
+
+<span class="c1"># Build a preview for just one file</span>
+uv<span class="w"> </span>run<span class="w"> </span>transpiler-pro<span class="w"> </span>check<span class="w"> </span>--file<span class="w"> </span>security-guide.adoc
+</code></pre>
+</div>
+
+<h2>Audit &amp; Quality Control</h2>
+
+<p>Transpiler-Pro provides a two-layered validation system to ensure your documentation is both linguistically polished and structurally complete.</p>
+
+<h3>1. Linguistic Healing Logs (Phase Y)</h3>
+
+<p>During the repair phase, the tool tracks automated improvements and identifies manual tasks:</p>
+
+<ul>
+<li><strong>Automated Fixes</strong> - The CLI reports exactly how many grammar, tense, and branding issues were auto-healed.</li>
+<li><strong>Review Logs</strong> - Any complex stylistic issues that require a human eye are logged in the terminal with line numbers and rule IDs.</li>
+<li><strong>Style-Guide Perfect</strong> - A confirmation that the document has passed 100% of the SUSE official rules.</li>
+</ul>
+
+<h3>2. Content Parity Dashboard (Phase Z)</h3>
+
+<p>After conversion, the tool runs a strict comparison between the Markdown source and the AsciiDoc result:</p>
+
+<ul>
+<li><strong>Prose Coverage</strong> - A percentage-based check ensuring the core message was preserved.</li>
+<li><strong>Snippet Defense</strong> - A zero-tolerance check for code blocks; if a technical snippet is lost, the audit flags a <strong>CRITICAL ERROR</strong>.</li>
+<li><strong>Detailed Audit Logs</strong> - Generates exhaustive JSON evidence in <code>data/audit-logs/</code> for any file falling below the 98% threshold, allowing for rapid debugging of technical edge cases.</li>
+</ul>
+
+<h2>Development &amp; Testing</h2>
+
+<p>To verify the NLP logic, structural regex, and parity engine:</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># Run the test suite (Unit tests for Shields and NLP)</span>
+uv<span class="w"> </span>run<span class="w"> </span>pytest
+
+<span class="c1"># Generate the API Reference (Project Portal)</span>
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>docs.py
+</code></pre>
+</div>
+
+                <hr>
+                <p style="font-size: 0.8rem; color: #888;">Portal Last Updated: 2026-05-20 06:59:58</p>
+            </article>
+        </main>
+    </body>
+    </html>
+    
