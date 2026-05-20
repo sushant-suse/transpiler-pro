@@ -85,8 +85,9 @@ fleshed out with assertions on real behavior.
   existing fixtures and assertions where they still apply.
 - **Never silently delete tests.** If a source symbol is removed, mark the
   obsolete test by:
-  1. Adding `pytest.skip("Source symbol removed; needs review", allow_module_level=False)`
-     at the top of the affected test function, **and**
+  1. Adding `pytest.skip("Source symbol removed; needs review")` at the top
+     of the affected test function (or `@pytest.mark.skip(reason=...)` on it),
+     **and**
   2. Leaving a `# TODO(test-sync): source X removed in <commit>` comment.
 
   A human reviewer makes the final call on deletion.
