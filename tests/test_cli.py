@@ -22,8 +22,11 @@ def logic_setup(tmp_path, monkeypatch):
     in_dir.mkdir()
     out_dir.mkdir()
 
+    intermediate_dir = tmp_path / "intermediate"
+    intermediate_dir.mkdir()
+
     monkeypatch.setattr("transpiler_pro.cli.INPUT_DIR", in_dir)
-    monkeypatch.setattr("transpiler_pro.cli.INTERMEDIATE_DIR", tmp_path / "intermediate")
+    monkeypatch.setattr("transpiler_pro.cli.INTERMEDIATE_DIR", intermediate_dir)
     monkeypatch.setattr("transpiler_pro.cli.OUTPUT_DIR", out_dir)
     
     # Mock config loader to avoid disk I/O issues
@@ -56,7 +59,7 @@ def pipeline_spies(monkeypatch):
     monkeypatch.setattr("transpiler_pro.cli.convert_x", _convert_x)
     monkeypatch.setattr("transpiler_pro.cli.repair_y", _repair_y)
     monkeypatch.setattr("transpiler_pro.cli.audit_pipeline", _audit_pipeline)
-    monkeypatch.setattr("transpiler_pro.cli.generate_master_attributes", lambda **kwargs: None)
+    monkeypatch.setattr("transpiler_pro.cli.generate_master_attributes", lambda **_kwargs: None)
 
     return calls
 
