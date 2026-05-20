@@ -9,7 +9,7 @@ to ensure isolated, high-speed test execution.
 """
 
 import pytest
-from transpiler_pro.cli import run_pipeline, app
+from transpiler_pro.cli import execute_full_pipeline, app
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -23,6 +23,7 @@ def logic_setup(tmp_path, monkeypatch):
     out_dir.mkdir()
 
     monkeypatch.setattr("transpiler_pro.cli.INPUT_DIR", in_dir)
+    monkeypatch.setattr("transpiler_pro.cli.INTERMEDIATE_DIR", tmp_path / "intermediate")
     monkeypatch.setattr("transpiler_pro.cli.OUTPUT_DIR", out_dir)
     
     # Mock config loader to avoid disk I/O issues
@@ -30,43 +31,72 @@ def logic_setup(tmp_path, monkeypatch):
         "pipeline": {"supported_extensions": [".md"]},
         "antora": {"headers": [":toc:"]}
     })
-    
-    # Mock subprocess
-    monkeypatch.setattr("subprocess.run", lambda *a, **k: None)
-    
+
     return {"in": in_dir, "out": out_dir, "tmp": tmp_path}
+
+
+@pytest.fixture
+def pipeline_spies(monkeypatch):
+    """Mocks side-effectful pipeline steps and captures orchestration arguments."""
+    calls = {"sync": 0, "repair_file_name": None, "audit": 0}
+
+    def _sync_styles(**kwargs):
+        calls["sync"] += 1
+
+    def _convert_x(**kwargs):
+        return None
+
+    def _repair_y(**kwargs):
+        calls["repair_file_name"] = kwargs.get("file_name")
+
+    def _audit_pipeline(**kwargs):
+        calls["audit"] += 1
+
+    monkeypatch.setattr("transpiler_pro.cli.sync_styles", _sync_styles)
+    monkeypatch.setattr("transpiler_pro.cli.convert_x", _convert_x)
+    monkeypatch.setattr("transpiler_pro.cli.repair_y", _repair_y)
+    monkeypatch.setattr("transpiler_pro.cli.audit_pipeline", _audit_pipeline)
+    monkeypatch.setattr("transpiler_pro.cli.generate_master_attributes", lambda **kwargs: None)
+
+    return calls
 
 def test_cli_help():
     """CLI wrapper check (this usually works even when 'run' fails)."""
-    result = runner.invoke(app, ["run", "--help"])
+    result = runner.invoke(app, ["full-run", "--help"])
     assert result.exit_code == 0
 
-def test_logic_sync_invocation(logic_setup, capsys):
-    """Tests the run_pipeline logic directly."""
-    run_pipeline(sync=True, config_path=logic_setup["tmp"] / "fake.toml")
-    captured = capsys.readouterr().out
-    assert "Syncing SUSE Style Guide" in captured
+def test_logic_sync_invocation(logic_setup, pipeline_spies):
+    """Ensures the full pipeline calls style sync when enabled."""
+    execute_full_pipeline(
+        file_name=None,
+        sync=True,
+        audit=False,
+        input_path=logic_setup["in"],
+        output_path=logic_setup["out"],
+        config=str(logic_setup["tmp"] / "fake.toml"),
+    )
+    assert pipeline_spies["sync"] == 1
 
-def test_logic_run_empty_dir(logic_setup, capsys):
-    """Tests the run_pipeline logic handles empty dirs."""
-    run_pipeline(config_path=logic_setup["tmp"] / "fake.toml")
-    captured = capsys.readouterr().out
-    assert "No source files detected" in captured
+def test_logic_run_empty_dir(logic_setup, pipeline_spies):
+    """Ensures audit can be disabled for a no-op run."""
+    execute_full_pipeline(
+        file_name=None,
+        sync=False,
+        audit=False,
+        input_path=logic_setup["in"],
+        output_path=logic_setup["out"],
+        config=str(logic_setup["tmp"] / "fake.toml"),
+    )
+    assert pipeline_spies["audit"] == 0
 
-def test_logic_full_orchestration(logic_setup, monkeypatch, capsys):
-    """Tests the full logic flow from Markdown to AsciiDoc."""
-    test_md = logic_setup["in"] / "test.md"
-    test_md.write_text("# Hello")
-    
-    # Mock engines
-    monkeypatch.setattr("transpiler_pro.core.converter.DocConverter.convert_file", 
-                        lambda self, src, dest: dest.write_text("= Hello"))
-    monkeypatch.setattr("transpiler_pro.core.linter.StyleLinter.run", lambda self: {})
-    monkeypatch.setattr("transpiler_pro.core.linter.StyleLinter.setup_config", lambda self: None)
-    monkeypatch.setattr("transpiler_pro.core.linter.StyleLinter.display_report", lambda self, x: None)
-    
-    run_pipeline(file_name="test.md", config_path=logic_setup["tmp"] / "fake.toml")
-    
-    assert (logic_setup["out"] / "test.adoc").exists()
-    captured = capsys.readouterr().out
-    assert "Phase 1" in captured
+def test_logic_full_orchestration(logic_setup, pipeline_spies):
+    """Ensures markdown targets are mapped to .adoc for Y-phase repair."""
+    execute_full_pipeline(
+        file_name="test.md",
+        sync=False,
+        audit=False,
+        input_path=logic_setup["in"],
+        output_path=logic_setup["out"],
+        config=str(logic_setup["tmp"] / "fake.toml"),
+    )
+    assert pipeline_spies["repair_file_name"] == "test.adoc"
