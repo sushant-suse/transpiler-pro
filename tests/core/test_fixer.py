@@ -35,7 +35,7 @@ def mock_fixer(tmp_path):
     # 2. Initialize the Knowledge Base directory and file
     kb_path.parent.mkdir(parents=True)
     kb_path.write_text(json.dumps({
-        "branding": {"id": "ID", "suse": "SUSE"},
+        "automated_fixes": {"id": "ID", "suse": "SUSE"},
         "learned": {}
     }))
     
@@ -73,7 +73,12 @@ def test_branding_and_learning_discovery(mock_fixer, tmp_path):
     
     violations = [
         {"Line": 1, "Message": "Use 'SUSE' instead of 'suse'", "Check": "SUSE.Branding"},
-        {"Line": 1, "Message": "Spelling error: 'kramdoc'", "Check": "Vale.Spelling"}
+        {
+            "Line": 1,
+            "Message": "Spelling error: 'kramdoc'",
+            "Check": "Vale.Spelling",
+            "Suggestion": "Kramdoc",
+        }
     ]
     
     mock_fixer.fix_file(test_file, violations)
