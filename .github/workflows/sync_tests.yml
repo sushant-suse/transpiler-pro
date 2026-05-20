@@ -1,0 +1,94 @@
+name: Sync Tests
+
+# Keeps tests/ structurally mirrored to src/transpiler_pro/.
+#
+# Behavior:
+#   * On PRs / pushes that touch src/** -> run `sync_tests.py --check`.
+#     The job fails (with a clear message) if any source module is missing
+#     its mirrored test file, prompting the contributor (or the Copilot
+#     coding agent assigned to the PR) to scaffold them.
+#   * On manual `workflow_dispatch` -> run the scaffolder in write mode and
+#     open a PR with any newly-scaffolded stubs for review.
+#
+# See AGENTS.md for the full convention. The scaffolder uses only the Python
+# standard library, so no `uv sync` is required for the check job.
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "src/**"
+      - "scripts/sync_tests.py"
+      - "AGENTS.md"
+      - ".github/workflows/sync_tests.yml"
+  push:
+    branches: [main, master]
+    paths:
+      - "src/**"
+      - "scripts/sync_tests.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-mirror:
+    name: Check test mirror
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify tests/ mirrors src/
+        run: python scripts/sync_tests.py --check
+
+  scaffold-and-pr:
+    name: Scaffold missing tests and open PR
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scaffold any missing test stubs
+        run: python scripts/sync_tests.py
+
+      - name: Open PR with scaffolded stubs
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/sync-tests
+          commit-message: "chore(tests): scaffold missing pytest mirrors"
+          title: "chore(tests): scaffold missing pytest mirrors"
+          body: |
+            This PR was opened automatically by `.github/workflows/sync_tests.yml`.
+
+            It adds **stub** pytest files for any source modules under
+            `src/transpiler_pro/` that were missing a mirrored test file, per
+            the conventions in [`AGENTS.md`](../blob/HEAD/AGENTS.md).
+
+            ### Reviewer checklist
+            - [ ] Replace each `@pytest.mark.xfail` stub with real assertions
+                  that exercise observable behavior.
+            - [ ] Mock external side effects (`spacy`, `requests`, file system,
+                  `subprocess`) — see AGENTS.md §2.
+            - [ ] Confirm `uv run pytest` passes locally.
+
+            Auto-generated tests can encode incorrect behavior as
+            "expected" — human review is required before merging.
+          labels: |
+            tests
+            automated
+          delete-branch: true
