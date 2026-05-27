@@ -11,7 +11,14 @@ jobs:
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
 
       - name: Extract Version
         id: vars
@@ -19,18 +26,12 @@ jobs:
           BRANCH="${{ github.event.pull_request.head.ref }}"
           VERSION=${BRANCH#release/}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          
-      - name: Build and Release
+
+      - name: Build and Create GitHub Release
         run: |
           uv build
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git tag ${{ steps.vars.outputs.version }}
-          git push origin ${{ steps.vars.outputs.version }}
-
-      - name: GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.vars.outputs.version }}
-          files: dist/*
-          generate_release_notes: true
+          gh release create ${{ steps.vars.outputs.version }} \
+            --generate-notes \
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

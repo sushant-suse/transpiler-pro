@@ -5,49 +5,53 @@ on:
     branches: [main, master]
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      - uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          enable-cache: true
+          python-version: '3.12'
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+
+      - name: Install uv
+        run: pip install uv
 
       - name: Build Unified Portal
         run: |
-          # 1. Install dependencies
           uv sync --group dev
-          
-          # 2. Ensure the NLP model is present
           uv run python -m spacy download en_core_web_sm
-          
-          # 3. Execute the custom build engine
           uv run python docs.py 
 
-          # 4. FORCE: Remove any hidden .gitignore files inside the docs folder 
-          # that might be sabotaging the rsync/deployment step.
-          find docs -name ".gitignore" -delete
-          
-          # 5. Explicitly ensure the directory is seen as "not empty"
-          mkdir -p docs/coverage_report
-          touch docs/coverage_report/.gitkeep
-          
-          # Verify assets for the log
-          echo "Final check of docs structure:"
-          ls -R docs/coverage_report
-          
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          folder: docs
-          branch: gh-pages
-          clean: true
-          single-commit: true
-          force: true
-          commit-message: "Deploy Portal: ${{ github.sha }} [Forced Sync]"
+          path: './docs'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

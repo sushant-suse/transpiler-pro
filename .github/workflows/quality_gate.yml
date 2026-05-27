@@ -21,10 +21,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Cache uv
+        uses: actions/cache@v4
         with:
-          enable-cache: true
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+
+      - name: Install uv
+        run: |
+          pip install uv
+          uv --version
 
       - name: Install System & PyPI Dependencies
         run: |
@@ -72,7 +78,8 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           echo "${{ github.event.number }}" > pr_number.txt
-          echo "<details><summary>🚩 Code Coverage Report</summary>" > coverage_comment.txt
+          echo "<!-- coverage-comment -->" > coverage_comment.txt
+          echo "<details><summary>🚩 Code Coverage Report</summary>" >> coverage_comment.txt
           echo "" >> coverage_comment.txt
           echo '```text' >> coverage_comment.txt
           cat coverage_report.txt >> coverage_comment.txt
