@@ -66,29 +66,38 @@ jobs:
       - name: Scaffold any missing test stubs
         run: python scripts/sync_tests.py
 
-      - name: Open PR with scaffolded stubs
-        uses: peter-evans/create-pull-request@v6
-        with:
-          branch: chore/sync-tests
-          commit-message: "chore(tests): scaffold missing pytest mirrors"
-          title: "chore(tests): scaffold missing pytest mirrors"
-          body: |
-            This PR was opened automatically by `.github/workflows/sync_tests.yml`.
+      - name: Commit, Push, and Open PR if changes exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -b chore/sync-tests
+          git add tests/
+          # Only commit and create PR if there are changes
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(tests): scaffold missing pytest mirrors"
+            git push origin chore/sync-tests --force
+            gh pr create \
+              --title "chore(tests): scaffold missing pytest mirrors" \
+              --label "tests,automated" \
+              --body-file - <<-EOF
+              This PR was opened automatically by \`.github/workflows/sync_tests.yml\`.
 
-            It adds **stub** pytest files for any source modules under
-            `src/transpiler_pro/` that were missing a mirrored test file, per
-            the conventions in [`AGENTS.md`](../blob/HEAD/AGENTS.md).
+              It adds **stub** pytest files for any source modules under
+              \`src/transpiler_pro/\` that were missing a mirrored test file, per
+              the conventions in \`AGENTS.md\`.
 
-            ### Reviewer checklist
-            - [ ] Replace each `@pytest.mark.xfail` stub with real assertions
-                  that exercise observable behavior.
-            - [ ] Mock external side effects (`spacy`, `requests`, file system,
-                  `subprocess`) — see AGENTS.md §2.
-            - [ ] Confirm `uv run pytest` passes locally.
+              ### Reviewer checklist
+              - [ ] Replace each \`@pytest.mark.xfail\` stub with real assertions
+                    that exercise observable behavior.
+              - [ ] Mock external side effects (\`spacy\`, \`requests\`, file system,
+                    \`subprocess\`) — see AGENTS.md §2.
+              - [ ] Confirm \`uv run pytest\` passes locally.
 
-            Auto-generated tests can encode incorrect behavior as
-            "expected" — human review is required before merging.
-          labels: |
-            tests
-            automated
-          delete-branch: true
+              Auto-generated tests can encode incorrect behavior as
+              "expected" — human review is required before merging.
+              EOF
+          else
+            echo "No missing test files to scaffold. No PR created."
+          fi
