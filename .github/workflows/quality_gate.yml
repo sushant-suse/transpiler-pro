@@ -83,15 +83,7 @@ jobs:
           # We do this BEFORE the audit so we have a clean environment to scan.
           uv sync --group dev
 
-      # Step 6: Upgrade vulnerable packages.
-      # This step manually upgrades packages that pip-audit flags as vulnerable.
-      # The best practice is to update the dependency version in your pyproject.toml
-      # file and regenerate the lock file, but this ensures the CI passes immediately.
-      - name: Upgrade Vulnerable Dependencies
-        run: |
-          uv pip install --upgrade "pygments>=2.20.0"
-
-      # Step 7: Perform a security audit of the installed Python packages.
+      # Step 6: Perform a security audit of the installed Python packages.
       - name: Security Audit
         run: |
           # --- AUDIT STRATEGY ---
@@ -102,7 +94,7 @@ jobs:
           # The workflow will fail if any vulnerabilities are found.
           uv run pip-audit --local --skip-editable
 
-      # Step 8: Install dependencies that are not on PyPI and the project itself.
+      # Step 7: Install dependencies that are not on PyPI and the project itself.
       - name: Install NLP Model & Project
         run: |
           # These are installed *after* the audit because pip-audit cannot scan them,
@@ -116,7 +108,7 @@ jobs:
           # Install the project in editable mode for testing
           uv pip install -e .
 
-      # Step 9: Run the test suite using pytest and generate a coverage report.
+      # Step 8: Run the test suite using pytest and generate a coverage report.
       - name: Run Tests with Coverage
         run: |
           # --cov=src tells pytest to measure coverage for the 'src' directory.
@@ -124,7 +116,8 @@ jobs:
           # 'tee' redirects the output to both the console (for live logs) and a file (for the artifact).
           # Execute pytest and capture output for the PR comment
           uv run pytest --cov=src --cov-report=term-missing | tee coverage_report.txt
-      # Step 10: If this is a pull request, prepare the content for a PR comment.
+      
+      # Step 9: If this is a pull request, prepare the content for a PR comment.
       - name: Prepare Coverage Comment
         if: github.event_name == 'pull_request'
         run: |
@@ -141,7 +134,7 @@ jobs:
           echo "" >> coverage_comment.txt
           echo "</details>" >> coverage_comment.txt
 
-      # Step 11: Upload the prepared comment files as an artifact.
+      # Step 10: Upload the prepared comment files as an artifact.
       - name: Upload Artifacts
         # This step only runs on pull request events.
         if: github.event_name == 'pull_request'
