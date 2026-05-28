@@ -1,47 +1,76 @@
+# This workflow is responsible for posting the code coverage report as a comment on a pull request.
+# It is designed to be triggered by another workflow, separating the concerns of testing and reporting.
 name: Post Coverage Comment
 
 on:
+  # This workflow is triggered by the completion of another workflow.
   workflow_run:
+    # Specifically, it waits for the "Quality Gate" workflow to finish.
     workflows: ["Quality Gate"]
+    # It only triggers when the "Quality Gate" workflow has 'completed'.
     types: [completed]
 
+# Define the permissions required for this workflow.
 permissions:
+  # 'pull-requests: write' is necessary to allow the workflow to post and update comments on pull requests.
   pull-requests: write
 
 jobs:
   comment:
     runs-on: ubuntu-latest
+    # Concurrency control ensures that for any given pull request, only one instance of this job runs at a time.
+    # If a new commit is pushed and the Quality Gate runs again, any in-progress comment job for the same PR will be canceled.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.workflow_run.pull_requests[0].number }}
+      cancel-in-progress: true
+    # This job will only run if the triggering "Quality Gate" workflow was associated with a pull request
+    # AND that workflow completed successfully. This prevents posting comments on failed or non-PR builds.
     if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     steps:
+      # Step 1: Download the artifacts from the completed "Quality Gate" workflow run.
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
+          # The name of the artifact to download, which was uploaded by the Quality Gate workflow.
           name: coverage-artifact
+          # The ID of the workflow run that triggered this workflow. This ensures we get the correct artifact.
           run-id: ${{ github.event.workflow_run.id }}
+          # The GITHUB_TOKEN is required for the action to authenticate with the GitHub API.
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Step 2: Read the pull request number from the downloaded artifact file.
       - name: Read PR Data
         id: pr
         run: |
+          # The pr_number.txt file contains the PR number. This command reads it and sets it as a step output.
           echo "number=$(cat pr_number.txt)" >> $GITHUB_OUTPUT
 
+      # Step 3: Use the GitHub CLI to post a new comment or update an existing one.
       - name: Post or Update Coverage Comment
         env:
+          # Pass the GITHUB_TOKEN and the PR number as environment variables to the script.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          # Find the bot's previous comment using the marker
+          # Use the GitHub CLI to query the API for comments on the specific pull request.
+          # The 'jq' command filters the comments to find one posted by the 'github-actions[bot]'
+          # that also contains our unique HTML marker '<!-- coverage-comment -->'.
+          # This allows us to find and update our specific comment without affecting others.
           COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
             -H "Accept: application/vnd.github+json" \
             --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- coverage-comment -->"))) | .id' | head -n 1)
 
-          # If a comment exists, update it. Otherwise, create a new one.
+          # Check if a COMMENT_ID was found.
           if [ -n "$COMMENT_ID" ]; then
+            # If an existing comment was found, update it using a PATCH request to the comments API.
+            # The body of the comment is read from the 'coverage_comment.txt' file.
             echo "Found existing comment ID: $COMMENT_ID. Updating..."
             gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
               -X PATCH \
               -f body=@coverage_comment.txt
           else
+            # If no existing comment was found, create a new one on the pull request.
+            # The body of the comment is read from the 'coverage_comment.txt' file.
             echo "No existing comment found. Creating a new one..."
             gh pr comment $PR_NUMBER -F coverage_comment.txt
           fi

@@ -1,19 +1,12 @@
+# This workflow ensures that the test suite in `tests/` stays structurally
+# synchronized with the source code in `src/`. It has two modes:
+# 1. A 'check' mode that runs on PRs and pushes to verify synchronization.
+# 2. A 'scaffold' mode that can be run manually to generate missing test files.
 name: Sync Tests
 
-# Keeps tests/ structurally mirrored to src/transpiler_pro/.
-#
-# Behavior:
-#   * On PRs / pushes that touch src/** -> run `sync_tests.py --check`.
-#     The job fails (with a clear message) if any source module is missing
-#     its mirrored test file, prompting the contributor (or the Copilot
-#     coding agent assigned to the PR) to scaffold them.
-#   * On manual `workflow_dispatch` -> run the scaffolder in write mode and
-#     open a PR with any newly-scaffolded stubs for review.
-#
-# See AGENTS.md for the full convention. The scaffolder uses only the Python
-# standard library, so no `uv sync` is required for the check job.
-
 on:
+  # On pull requests, this workflow runs in 'check' mode to ensure that any changes
+  # to the source code are accompanied by corresponding test files.
   pull_request:
     branches: [main, master]
     paths:
@@ -21,83 +14,127 @@ on:
       - "scripts/sync_tests.py"
       - "AGENTS.md"
       - ".github/workflows/sync_tests.yml"
+  # On pushes to main branches, this also runs in 'check' mode as a final safeguard.
   push:
     branches: [main, master]
     paths:
       - "src/**"
       - "scripts/sync_tests.py"
+  # 'workflow_dispatch' allows this workflow to be triggered manually from the GitHub UI.
+  # This is used to run the 'scaffold' mode.
   workflow_dispatch:
 
+# Concurrency control ensures that for any given branch, only the latest workflow run
+# will proceed, canceling any older, in-progress runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Define default permissions for the GITHUB_TOKEN for all jobs in this workflow.
+# By default, jobs only get read-only access to the repository contents.
 permissions:
   contents: read
 
 jobs:
+  # The 'check-mirror' job runs on pushes and pull requests to verify that the
+  # test directory structure correctly mirrors the source directory.
   check-mirror:
     name: Check test mirror
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Check out the repository's source code.
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # Step 2: Set up the specified version of Python.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      # Step 3: Run the sync script in '--check' mode.
+      # This command will exit with a non-zero status code if any test files are missing,
+      # causing the workflow to fail and blocking the PR.
       - name: Verify tests/ mirrors src/
         run: python scripts/sync_tests.py --check
 
+  # The 'scaffold-and-pr' job is run manually via 'workflow_dispatch'.
+  # It generates missing test files, commits them, and opens a pull request.
   scaffold-and-pr:
     name: Scaffold missing tests and open PR
+    # This job only runs when the workflow is triggered manually.
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # This job requires elevated permissions to write to the repository and create pull requests.
     permissions:
+      # 'contents: write' is needed to push a new branch with the generated files.
       contents: write
+      # 'pull-requests: write' is needed to create a pull request.
       pull-requests: write
     steps:
+      # Step 1: Check out the repository's source code.
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # Step 2: Set up the specified version of Python.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      # Step 3: Run the sync script in its default mode.
+      # This will create any missing test directories and stub files.
       - name: Scaffold any missing test stubs
         run: python scripts/sync_tests.py
 
+      # Step 4: If the script created new files, commit them and open a PR.
       - name: Commit, Push, and Open PR if changes exist
         env:
+          # The GITHUB_TOKEN is required for the 'gh' CLI to authenticate with the GitHub API.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Configure git with the bot's identity for the commit.
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git checkout -b chore/sync-tests
+          # Create a new branch or reset it if it already exists.
+          git checkout -B chore/sync-tests
+          # Stage all changes within the 'tests/' directory.
           git add tests/
-          # Only commit and create PR if there are changes
+          # Check if there are any staged changes. The script will only proceed if files were generated.
           if ! git diff --staged --quiet; then
+            # Commit the newly scaffolded test files.
             git commit -m "chore(tests): scaffold missing pytest mirrors"
+            # Force-push the branch to the remote. This will update the branch if it already exists.
             git push origin chore/sync-tests --force
-            gh pr create \
-              --title "chore(tests): scaffold missing pytest mirrors" \
-              --label "tests,automated" \
-              --body-file - <<-EOF
-              This PR was opened automatically by \`.github/workflows/sync_tests.yml\`.
 
-              It adds **stub** pytest files for any source modules under
-              \`src/transpiler_pro/\` that were missing a mirrored test file, per
-              the conventions in \`AGENTS.md\`.
+            # Check if a pull request for this branch already exists.
+            if gh pr view chore/sync-tests >/dev/null 2>&1; then
+              echo "An existing PR was updated."
+            else
+              # If no PR exists, create a new one using the GitHub CLI.
+              # The body of the PR is populated from a heredoc, providing context to the reviewer.
+              gh pr create \
+                --title "chore(tests): scaffold missing pytest mirrors" \
+                --label "tests,automated" \
+                --body-file - <<-EOF
+                This PR was opened automatically by \`.github/workflows/sync_tests.yml\`.
 
-              ### Reviewer checklist
-              - [ ] Replace each \`@pytest.mark.xfail\` stub with real assertions
-                    that exercise observable behavior.
-              - [ ] Mock external side effects (\`spacy\`, \`requests\`, file system,
-                    \`subprocess\`) — see AGENTS.md §2.
-              - [ ] Confirm \`uv run pytest\` passes locally.
+                It adds **stub** pytest files for any source modules under
+                \`src/transpiler_pro/\` that were missing a mirrored test file, per
+                the conventions in \`AGENTS.md\`.
 
-              Auto-generated tests can encode incorrect behavior as
-              "expected" — human review is required before merging.
-              EOF
+                ### Reviewer checklist
+                - [ ] Replace each \`@pytest.mark.xfail\` stub with real assertions
+                      that exercise observable behavior.
+                - [ ] Mock external side effects (\`spacy\`, \`requests\`, file system,
+                      \`subprocess\`) — see AGENTS.md §2.
+                - [ ] Confirm \`uv run pytest\` passes locally.
+
+                Auto-generated tests can encode incorrect behavior as
+                "expected" — human review is required before merging.
+                EOF
+            fi
           else
+            # If no files were generated, print a message and exit successfully.
             echo "No missing test files to scaffold. No PR created."
           fi

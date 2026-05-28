@@ -1,57 +1,104 @@
+# This workflow builds and deploys the project's documentation to GitHub Pages.
 name: Deploy Live Docs
 
 on:
+  # The workflow is triggered on any 'push' event to the 'main' or 'master' branches.
   push:
     branches: [main, master]
 
+# Concurrency control ensures that only one run of this workflow for a given branch
+# is active at a time. If a new commit is pushed, any previously running or pending
+# workflow for the same branch will be canceled. This saves resources and prevents
+# deploying outdated documentation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Define the permissions granted to the GITHUB_TOKEN for this workflow.
+# Following the principle of least privilege, we grant only the necessary permissions.
 permissions:
+  # 'contents: read' is required to check out the repository's code.
   contents: read
+  # 'pages: write' is required to deploy content to GitHub Pages.
   pages: write
+  # 'id-token: write' is required for OpenID Connect (OIDC) authentication, which the
+  # modern 'deploy-pages' action uses for secure, token-based deployment.
   id-token: write
 
 jobs:
+  # The 'build' job is responsible for checking out the code, installing dependencies,
+  # and building the static documentation site.
   build:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Check out the repository's source code.
       - uses: actions/checkout@v4
         with:
+          # 'submodules: recursive' ensures that any Git submodules are also checked out.
           submodules: 'recursive'
 
+      # Step 2: Set up the specified version of Python.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
+      # Step 3: Cache the 'uv' dependency cache to speed up subsequent workflow runs.
       - name: Cache uv
         uses: actions/cache@v4
         with:
+          # The path to the directory that should be cached.
           path: ~/.cache/uv
+          # The primary cache key. A cache miss occurs if the pyproject.toml file changes.
           key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+          # Fallback keys to use if the primary key doesn't have a cache hit.
+          # This increases the chance of finding a partially useful cache.
+          restore-keys: |
+            ${{ runner.os }}-uv-
 
+      # Step 4: Install 'uv', the fast Python package installer and resolver.
       - name: Install uv
         run: pip install uv
 
+      # Step 5: Build the documentation portal.
       - name: Build Unified Portal
         run: |
+          # Install all project dependencies from pyproject.toml using uv.
           uv sync --group dev
+          # Download the required spaCy NLP model.
           uv run python -m spacy download en_core_web_sm
+          # Run the custom script that generates the documentation files.
           uv run python docs.py 
 
+      # Step 6: Configure the workflow for GitHub Pages deployment.
+      # This action configures the necessary environment variables for the upload action.
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      # Step 7: Upload the generated documentation as a GitHub Pages artifact.
+      # This artifact will be picked up by the 'deploy' job.
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          # The path to the directory containing the static site to be uploaded.
           path: './docs'
 
+  # The 'deploy' job is responsible for deploying the artifact to GitHub Pages.
+  # It only runs after the 'build' job has completed successfully.
   deploy:
     environment:
+      # Specifies the deployment environment. This enables environment-specific
+      # protection rules and secrets.
       name: github-pages
+      # Sets the URL for the environment, which will be visible on the deployment page.
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    # This job depends on the successful completion of the 'build' job.
     needs: build
     steps:
+      # This is the final step that performs the deployment.
       - name: Deploy to GitHub Pages
         id: deployment
+        # This official action retrieves the artifact uploaded by the 'build' job
+        # and deploys it to GitHub Pages.
         uses: actions/deploy-pages@v4
