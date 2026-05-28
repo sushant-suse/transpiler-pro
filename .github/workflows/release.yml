@@ -1,39 +1,84 @@
+# This workflow automates the process of creating a GitHub Release when a pull request
+# from a 'release/*' branch is merged into 'main' or 'master'.
 name: Release on Merge
 
 on:
+  # This workflow is triggered when a pull request is closed.
   pull_request:
+    # The specific event type is 'closed'.
     types: [closed]
+    # It only runs for pull requests targeting the 'main' or 'master' branches.
     branches: [main, master]
 
+# Concurrency control ensures that only one release job can run at a time.
+concurrency:
+  # All runs of this workflow are placed in the same concurrency group.
+  group: ${{ github.workflow }}
+  # 'cancel-in-progress: false' is crucial for releases. It ensures that if two release PRs
+  # are merged close together, the second one will wait for the first to finish, rather
+  # than canceling it. This prevents a race condition where a release might be missed.
+  cancel-in-progress: false
+
 jobs:
+  # The single job in this workflow, responsible for checking conditions and creating the release.
   check-and-release:
     runs-on: ubuntu-latest
+    # Define the permissions required for the GITHUB_TOKEN for this job.
     permissions:
+      # 'contents: write' is required to create a GitHub Release and upload release assets.
       contents: write
+      # 'pull-requests: read' is required for the 'gh release create --generate-notes' command
+      # to read the pull request details and automatically generate release notes.
+      pull-requests: read
+    # This 'if' condition is the core logic that ensures the job only runs under specific circumstances:
+    # 1. The pull request must have been merged (not just closed).
+    # 2. The head branch of the pull request (the source branch) must start with 'release/'.
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
     steps:
+      # Step 1: Check out the repository's source code.
       - uses: actions/checkout@v4
 
+      # Step 2: Set up the specified version of Python.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
+      # Step 3: Cache the 'uv' dependency cache to speed up subsequent workflow runs.
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+
+      # Step 4: Install 'uv', the fast Python package installer.
       - name: Install uv
         run: pip install uv
 
+      # Step 5: Extract the version number from the branch name.
       - name: Extract Version
         id: vars
         run: |
+          # Get the full branch name (e.g., 'release/1.2.3').
           BRANCH="${{ github.event.pull_request.head.ref }}"
+          # Use shell parameter expansion to remove the 'release/' prefix, leaving just the version number.
           VERSION=${BRANCH#release/}
+          # Set the version number as a step output to be used in subsequent steps.
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      # Step 6: Build the project and create the GitHub Release.
       - name: Build and Create GitHub Release
         run: |
+          # Use 'uv build' to create the source distribution (sdist) and wheel files.
+          # These will be placed in the 'dist/' directory.
           uv build
+          # Use the official GitHub CLI ('gh') to create a new release.
+          # The tag for the release is taken from the version extracted in the previous step.
+          # '--generate-notes' automatically creates release notes from the pull requests merged since the last release.
+          # 'dist/*' tells the command to upload all files in the 'dist/' directory as release assets.
           gh release create ${{ steps.vars.outputs.version }} \
             --generate-notes \
             dist/*
         env:
+          # The GITHUB_TOKEN is required for the 'gh' CLI to authenticate with the GitHub API.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

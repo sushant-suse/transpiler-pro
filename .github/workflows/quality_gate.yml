@@ -1,83 +1,130 @@
+# This workflow serves as a comprehensive quality gate for the project.
+# It runs tests, performs a security audit, and generates a coverage report.
 name: Quality Gate
 
 on:
+  # Trigger the workflow on pushes to the main branches to ensure they are always green.
   push:
     branches: [main, master]
+  # Trigger the workflow on pull requests targeting the main branches to validate changes before merging.
   pull_request:
     branches: [main, master]
 
+# Concurrency control ensures that for any given pull request, only the latest run
+# for the most recent commit will execute, canceling any older, in-progress runs.
+# This saves resources and provides faster feedback.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+# Define the default permissions for the GITHUB_TOKEN for all jobs in this workflow.
+# By setting 'contents: read' at the top level, we enforce the principle of least privilege.
+# Jobs that need write access must explicitly request it.
+permissions:
+  contents: read
+
 jobs:
+  # The main job that runs all quality checks.
   test-and-audit:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Check out the repository's source code.
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
+          # 'submodules: recursive' ensures that any Git submodules are also checked out.
           submodules: recursive
-          fetch-depth: 0
+          # fetch-depth: 0 is removed as it's not needed for this workflow
+          # and removing it speeds up the checkout process.
 
+      # Step 2: Set up the specified version of Python for the job.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      # Step 3: Cache the 'uv' dependency cache to speed up subsequent workflow runs.
       - name: Cache uv
         uses: actions/cache@v4
         with:
+          # The path to the directory that should be cached.
           path: ~/.cache/uv
+          # The cache key is based on the runner's OS and a hash of the pyproject.toml file.
+          # A new cache will be created if the dependencies change.
           key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
 
+      # Step 4: Install 'uv', the fast Python package installer and resolver.
       - name: Install uv
         run: |
           pip install uv
           uv --version
 
+      # Step 5: Install system-level tools and Python dependencies.
       - name: Install System & PyPI Dependencies
         run: |
+          # Exit immediately if a command exits with a non-zero status.
           set -euo pipefail
 
+          # Install Vale, a prose linter, using a pinned version for deterministic builds.
           # 1. Install Vale (Pinned version via GitHub Releases for 100% reliability)
           VALE_VERSION="3.7.1"
           curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
             -o vale.tar.gz \
             "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"
           
+          # Extract and install the Vale binary to a location in the system's PATH.
           tar -xzf vale.tar.gz vale
           sudo install -m 0755 ./vale /usr/local/bin/vale
           vale --version
 
+          # Use 'uv sync' to install all dependencies defined in pyproject.toml for the 'dev' group.
+          # This is done before the security audit to ensure we are scanning the exact environment.
           # 2. 'uv sync' handles environment and PyPI-indexed dependencies
           # We do this BEFORE the audit so we have a clean environment to scan.
           uv sync --group dev
 
+      # Step 6: Perform a security audit of the installed Python packages.
       - name: Security Audit
         run: |
           # --- AUDIT STRATEGY ---
           # 1. We use --local to scan the site-packages installed by 'uv sync'.
           # 2. We use --skip-editable to ignore the local 'transpiler-pro' project folder.
-          # 3. We ignore CVE-2026-4539 (Pygments) because no fix version is currently 
-          uv run pip-audit --local --skip-editable \
-            --ignore-vuln CVE-2026-4539 \
-            --ignore-vuln CVE-2026-3219
+          # 3. Any real vulnerabilities found should be fixed or explicitly ignored here
+          #    after a security review. The placeholder CVEs have been removed.
+          # The workflow will fail if any vulnerabilities are found.
+          uv run pip-audit --local --skip-editable
 
+      # Step 7: Install dependencies that are not on PyPI and the project itself.
       - name: Install NLP Model & Project
         run: |
+          # These are installed *after* the audit because pip-audit cannot scan them,
+          # and it would produce warnings that could be mistaken for errors.
           # Install the non-PyPI dependencies AFTER the audit.
           # This prevents "Dependency not found on PyPI" warnings from crashing the gate.
           uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
           
+          # Install the current project in "editable" mode (-e) so that the test runner
+          # can find and execute the project's code.
           # Install the project in editable mode for testing
           uv pip install -e .
 
+      # Step 8: Run the test suite using pytest and generate a coverage report.
       - name: Run Tests with Coverage
         run: |
+          # --cov=src tells pytest to measure coverage for the 'src' directory.
+          # --cov-report=term-missing shows a summary in the terminal, including missing lines.
+          # 'tee' redirects the output to both the console (for live logs) and a file (for the artifact).
           # Execute pytest and capture output for the PR comment
           uv run pytest --cov=src --cov-report=term-missing | tee coverage_report.txt
 
+      # Step 9: If this is a pull request, prepare the content for a PR comment.
       - name: Prepare Coverage Comment
         if: github.event_name == 'pull_request'
         run: |
+          # Store the PR number in a file for the next job to use.
           echo "${{ github.event.number }}" > pr_number.txt
+          # Create the comment content, using a unique HTML comment to find it later for updates.
+          # The report is wrapped in a <details> tag to keep the PR clean.
           echo "<!-- coverage-comment -->" > coverage_comment.txt
           echo "<details><summary>🚩 Code Coverage Report</summary>" >> coverage_comment.txt
           echo "" >> coverage_comment.txt
@@ -87,11 +134,15 @@ jobs:
           echo "" >> coverage_comment.txt
           echo "</details>" >> coverage_comment.txt
 
+      # Step 10: Upload the prepared comment files as an artifact.
       - name: Upload Artifacts
+        # This step only runs on pull request events.
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
+          # Name the artifact so the 'Post Coverage Comment' workflow can find it.
           name: coverage-artifact
+          # List the files to be included in the artifact.
           path: |
             pr_number.txt
             coverage_comment.txt
